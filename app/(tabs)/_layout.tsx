@@ -10,7 +10,7 @@ import { COLORS } from '../../constants/color';
 export const PROFICIENCY_LEVELS = ['base', 'intermediate', 'advanced'] as const;
 export type ProficiencyLevel = typeof PROFICIENCY_LEVELS[number];
 
-const LEVEL_CONFIG: Record<ProficiencyLevel, { label: string; icon: 'signal-cellular-1' | 'signal-cellular-2' | 'signal-cellular-3' }> = {
+export const LEVEL_CONFIG: Record<ProficiencyLevel, { label: string; icon: 'signal-cellular-1' | 'signal-cellular-2' | 'signal-cellular-3' }> = {
   base: { label: 'Base', icon: 'signal-cellular-1' },
   intermediate: { label: 'Intermediate', icon: 'signal-cellular-2' },
   advanced: { label: 'Advanced', icon: 'signal-cellular-3' },

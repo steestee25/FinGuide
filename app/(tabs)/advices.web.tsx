@@ -1,5 +1,6 @@
-import { Feather } from '@expo/vector-icons'
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useIsFocused } from '@react-navigation/native'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
@@ -25,6 +26,7 @@ import {
 } from '../../lib/transactions'
 import locales from '../../locales/locales.json'
 import { HEADER_TOP, HORIZONTAL_GUTTER } from '../../styles/spacing'
+import { LEVEL_CONFIG, PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout'
 
 
 const NGROK_URL = 'https://rhyme-headlamp-overnight.ngrok-free.dev'
@@ -202,8 +204,16 @@ export default function Advices() {
   const { t, locale } = useTranslation()
   const insets = useSafeAreaInsets()
   const isFocused = useIsFocused()
+  const router = useRouter()
+  const { level } = useLocalSearchParams()
 
   const [period, setPeriod] = useState<PeriodType>('month')
+  const levelParam = Array.isArray(level) ? level[0] : level
+  const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>(
+    PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)
+      ? (levelParam as ProficiencyLevel)
+      : 'intermediate'
+  )
   const [advices, setAdvices] = useState<Advice[]>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -281,12 +291,26 @@ export default function Advices() {
   }
 
 
+  // Aggiorna il livello di competenza dell'utente quando level cambia
+  useEffect(() => {
+    if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
+      setProficiencyLevel(levelParam as ProficiencyLevel)
+    }
+  }, [levelParam])
+
+  const cycleProficiencyLevel = () => {
+    const currentIndex = PROFICIENCY_LEVELS.indexOf(proficiencyLevel)
+    const nextLevel = PROFICIENCY_LEVELS[(currentIndex + 1) % PROFICIENCY_LEVELS.length]
+    setProficiencyLevel(nextLevel)
+    router.setParams({ level: nextLevel })
+  }
+
   useEffect(() => {
     if (isFocused && !authLoading && session?.user) {
       fetchAndGenerate()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, period, authLoading, isFocused])
+  }, [session, period, proficiencyLevel, authLoading, isFocused])
 
   const fetchAndGenerate = async () => {
     if (!session?.user) return
@@ -391,6 +415,7 @@ export default function Advices() {
         })),
         totalSpent: summary.total,
         period: summary.period,
+        proficiency_level: proficiencyLevel,
       }
 
       console.log('[Server] payload:', JSON.stringify(payload))
@@ -510,9 +535,25 @@ export default function Advices() {
           justifyContent: 'space-between',
         }}
       >
-        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
-          {t ? t('tabs.analysis') : 'Consigli'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
+            {t ? t('tabs.analysis') : 'Consigli'}
+          </Text>
+          <TouchableOpacity
+            onPress={cycleProficiencyLevel}
+            style={styles.levelButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons
+              name={LEVEL_CONFIG[proficiencyLevel].icon}
+              size={18}
+              color={COLORS.primary}
+            />
+            <Text style={styles.levelButtonText}>
+              {LEVEL_CONFIG[proficiencyLevel].label}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Error message */}
@@ -762,6 +803,23 @@ export default function Advices() {
 }
 
 const styles = StyleSheet.create({
+  levelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  levelButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
