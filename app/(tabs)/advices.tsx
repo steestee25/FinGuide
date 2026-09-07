@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS } from '../../constants/color'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTranslation } from '../../lib/i18n'
+import { getLlamaContext, isLlamaReady, releaseLlamaContext } from '../../lib/llamaContext'
 import { downloadUrl, getModel, minValidSize, modelPath } from '../../lib/modelConfig'
 import {
   fetchExpensesByCategoryLast3Months,
@@ -28,14 +29,9 @@ const { width } = Dimensions.get('window')
 
 // llama.rn — only available on mobile
 let RNFS: any = null
-let initLlama: any = null
-let releaseAllLlama: any = null
 
 if (Platform.OS !== 'web') {
   RNFS = require('react-native-fs')
-  const llamaModule = require('llama.rn')
-  initLlama = llamaModule.initLlama
-  releaseAllLlama = llamaModule.releaseAllLlama
 }
 
 const MODEL = getModel()
@@ -177,7 +173,6 @@ export default function Advices() {
   const [pieData, setPieData] = useState<{ value: number; color: string; gradientCenterColor?: string; label: string; key?: string }[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
-  const contextRef = useRef<any>(null)
   const isInitializedRef = useRef(false)
   const pendingSummaryRef = useRef<any>(null)
   const isGeneratingRef = useRef(false)
@@ -293,22 +288,10 @@ export default function Advices() {
         }
       }
 
-      if (contextRef.current) {
-        console.log('[Model] releasing previous context…')
-        await releaseAllLlama()
-        contextRef.current = null
-      }
-
-      console.log('[Model] calling initLlama…')
+      console.log('[Model] acquiring shared llama context…')
       setStatusText(t('advicesLabels.modelLoading'))
-      contextRef.current = await initLlama({
-        model: path,
-        use_mlock: true,
-        n_ctx: 2048,
-        n_gpu_layers: 1,
-        n_threads: 4,
-      })
-      console.log('[Model] initLlama done, context ok:', !!contextRef.current)
+      await getLlamaContext(MODEL)
+      console.log('[Model] shared context ready')
 
       setModelReady(true)
       setStatusText('')
@@ -412,7 +395,7 @@ export default function Advices() {
 
       // 4. Generate advices — park if model not ready yet
       if (useLocalModel) {
-        if (contextRef.current && !isGeneratingRef.current) {
+        if (isLlamaReady() && !isGeneratingRef.current) {
           await generateWithLocalModel(summary)
         } else {
           console.log('[Fetch] model not ready or already generating — parking summary for later')
@@ -462,7 +445,7 @@ export default function Advices() {
       return
     }
 
-    if (!contextRef.current) {
+    if (!isLlamaReady()) {
       console.error('[Inference] no context available')
       generateFallback(summary)
       return
@@ -477,7 +460,8 @@ export default function Advices() {
       const prompt = buildPrompt(summary)
       console.log('[Inference] prompt length:', prompt.length)
 
-      const result = await contextRef.current.completion(
+      const llamaContext = await getLlamaContext()
+      const result = await llamaContext.completion(
         {
           prompt,
           n_predict: 800,
@@ -511,10 +495,7 @@ export default function Advices() {
       if (errMsg.includes('busy') || errMsg.includes('Context')) {
         console.log('[Inference] context is busy — reinitializing…')
         try {
-          if (contextRef.current) {
-            await releaseAllLlama()
-            contextRef.current = null
-          }
+          await releaseLlamaContext()
           // Restart initialization
           await initModel()
         } catch (reinitErr) {

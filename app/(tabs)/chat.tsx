@@ -13,7 +13,7 @@ import {
 
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams } from 'expo-router';
+import { useGlobalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 
 // Import components
@@ -28,20 +28,17 @@ import { useTranslation } from '@/lib/i18n';
 import {
   initializeLocalModels
 } from '@/lib/modelStorage';
+import { getLlamaContext } from '@/lib/llamaContext';
 import { loadProficiencyLevelWithFallback } from '@/lib/questionnaireStorage';
 import { retrieveRelevant } from '@/lib/retrieval';
 import { appStyles } from '../../styles/components/chatStyles';
+import { PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout';
 
 // Conditionally import native modules (only available on mobile)
 let RNFS: any = null;
-let initLlama: any = null;
-let releaseAllLlama: any = null;
 
 if (Platform.OS !== 'web') {
   RNFS = require('react-native-fs');
-  const llamaModule = require('llama.rn');
-  initLlama = llamaModule.initLlama;
-  releaseAllLlama = llamaModule.releaseAllLlama;
 }
 
 // ===================== Question Categories =====================
@@ -153,8 +150,13 @@ export default function Chat(): React.JSX.Element {
     sources?: { id: string; text: string; metadata?: { source_title?: string; source_url?: string; answer?: string } }[];
   };
 
-  const { resetMessages, rag } = useLocalSearchParams();
+  // Global, not local: the header lives in the (tabs) layout, so router.setParams
+  // writes onto the (tabs) route. useLocalSearchParams only sees this screen's own
+  // route params, so on native those updates never arrive (on web the URL round-trip
+  // hides the problem).
+  const { resetMessages, rag, level } = useGlobalSearchParams();
   const ragParam = Array.isArray(rag) ? rag[0] : rag;
+  const levelParam = Array.isArray(level) ? level[0] : level;
   const { locale, t } = useTranslation();
 
   if (Platform.OS === 'web') {
@@ -179,7 +181,7 @@ export default function Chat(): React.JSX.Element {
   const [conversation, setConversation] = useState<Message[]>(INITIAL_CONVERSATION);
   const [userInput, setUserInput] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
-  const [context, setContext] = useState<any>(null);
+  const [modelReady, setModelReady] = useState<boolean>(false);
   const [isPreparingModel, setIsPreparingModel] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isInitializingModels, setIsInitializingModels] = useState<boolean>(true);
@@ -285,13 +287,21 @@ export default function Chat(): React.JSX.Element {
     }
   }, []);
 
+  // Header selector: the `level` param wins over the stored questionnaire value.
+  useEffect(() => {
+    if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
+      setProficiencyLevel(levelParam as ProficiencyLevel);
+      console.log('✓ Proficiency level dal selettore:', levelParam);
+    }
+  }, [levelParam]);
+
   // Load proficiency level from user profile (con fallback a Supabase)
   useEffect(() => {
     const loadUserProficiency = async () => {
-      const level = await loadProficiencyLevelWithFallback();
-      if (level) {
-        setProficiencyLevel(level);
-        console.log('✓ Proficiency level caricato:', level);
+      const storedLevel = await loadProficiencyLevelWithFallback();
+      if (storedLevel) {
+        setProficiencyLevel(storedLevel);
+        console.log('✓ Proficiency level caricato:', storedLevel);
       } else {
         console.warn('Proficiency level non trovato, usando default: intermediate');
         setProficiencyLevel('intermediate');
@@ -364,7 +374,7 @@ export default function Chat(): React.JSX.Element {
     const messageToSend = message || userInput.trim();
     console.log('handleSendMessage:', JSON.stringify(messageToSend));
 
-    if (!context) {
+    if (!modelReady) {
       isSendingRef.current = false;
       Alert.alert(t('chat.modelNotLoadedTitle'), t('chat.modelNotLoadedMessage'));
       return;
@@ -425,19 +435,19 @@ export default function Chat(): React.JSX.Element {
       const maxDocs = 6;
       const trimmedDocs = retrievedDocsData.slice(0, maxDocs);
       if (ragEnabled && trimmedDocs.length) {
+        // Byte-for-byte the format the LoRA was trained on (_build_rag_messages,
+        // prova_server/main.py:170): the level instruction sits on the role line,
+        // RULES next, then one "DOCUMENTO [id]:" block per document joined by blank
+        // lines, and nothing after the last one. No indentation anywhere.
         const safeRetrievedText = trimmedDocs
-          .map((doc, index) => {
-            return `DOCUMENTO ${index + 1}:\n${doc.text}`;
-          })
+          .map(doc => `DOCUMENTO [${doc.id}]:\n${doc.text}`)
           .join('\n\n');
 
-          systemMessage = `Sei un assistente di finanza personale. 
-          
-          REGOLE: Rispondi usando esclusivamente le informazioni contenute nei documenti seguenti. Non inventare nulla. Non dare consigli specifici di investimento. Rispondi in italiano in modo conciso.
-          
-          ${safeRetrievedText}
-          ${getProficiencyInstruction()}`;
-
+        systemMessage =
+          `Sei un assistente di finanza personale. ${getProficiencyInstruction()}\n\n` +
+          'REGOLE: Rispondi SOLO usando i documenti seguenti. Non inventare. ' +
+          'Non dare consigli specifici di investimento. Rispondi in italiano in modo conciso.\n\n' +
+          safeRetrievedText;
       }
 
       messagesForModel.push({ role: 'system', content: systemMessage });
@@ -465,12 +475,15 @@ export default function Chat(): React.JSX.Element {
       ];
 
       let fullResponse = '';
-      const result = await context.completion(
+      const llamaContext = await getLlamaContext();
+      const result = await llamaContext.completion(
         {
           messages: messagesForModel,
-          n_predict: 2048,
+          // Leaves ~3.3k of the 4096-token window for the prompt, enough for six
+          // documents even at the corpus p90.
+          n_predict: 768,
           stop: stopWords,
-          temperature: 0.1,
+          temperature: 0.3,
           top_p: 0.95,
           repeat_penalty: 1.2,
           repeat_last_n: 128,
@@ -532,23 +545,11 @@ export default function Chat(): React.JSX.Element {
         return false;
       }
 
-      if (context) {
-        await releaseAllLlama();
-        setContext(null);
-        setConversation(INITIAL_CONVERSATION);
-      }
+      console.log('[LoadModel] Acquiring shared llama context...');
+      await getLlamaContext(MODEL);
 
-      console.log('[LoadModel] Initializing llama with model...');
-      const llamaContext = await initLlama({
-        model: destPath,
-        use_mlock: true,
-        n_ctx: 2048,      // was 4096 — halved, loads faster
-        n_gpu_layers: 1,
-        n_threads: 4,     
-      });
-
-      console.log('[LoadModel] Success! Context created');
-      setContext(llamaContext);
+      console.log('[LoadModel] Success! Context ready');
+      setModelReady(true);
       Alert.alert(t('model.loadedTitle'), t('model.loadedMessage'));
       return true;
     } catch (error) {
@@ -585,7 +586,7 @@ export default function Chat(): React.JSX.Element {
           </View>
         )}
 
-        {!isPreparingModel && !isInitializingModels && currentPage === 'conversation' && context && (
+        {!isPreparingModel && !isInitializingModels && currentPage === 'conversation' && modelReady && (
           <>
             {/* Categorie chips */}
             <ScrollView
@@ -808,7 +809,7 @@ export default function Chat(): React.JSX.Element {
           </>
         )}
 
-        {!isPreparingModel && !isInitializingModels && !context && modelLoadError && (
+        {!isPreparingModel && !isInitializingModels && !modelReady && modelLoadError && (
           <View style={appStyles.card}>
             <Text style={appStyles.subtitle}>{t('model.loadFailed')}</Text>
             <Text style={appStyles.errorText}>{modelLoadError}</Text>

@@ -1,7 +1,15 @@
 // Retrieves relevant documents from the knowledge base using BM25.
 
 import * as bm25 from './bm25Index';
-import { KNOWLEDGE_BASE } from './knowledgeBase_qa';
+import PASSAGES from './passages.json';
+
+/** A CONSOB paragraph, as exported by the server corpus (passages.jsonl). */
+type Passage = {
+  passage_id: string;
+  text:       string;
+  concept:    string;
+  source_url: string;
+};
 
 let RNFS: any = null;
 try { RNFS = require('react-native-fs'); } catch { /* not available on web */ }
@@ -25,7 +33,8 @@ type DiskCache = {
 };
 
 
-const CACHE_VERSION   = 1;
+// 2: corpus switched from ft.jsonl Q&A chunks to the 522 CONSOB paragraphs.
+const CACHE_VERSION   = 2;
 const CACHE_FILE      = RNFS
   ? `${RNFS.DocumentDirectoryPath}/bm25_index.json`
   : null;
@@ -34,14 +43,26 @@ const CACHE_FILE      = RNFS
 let indexedDocs: Doc[] | null = null;
 
 
+/**
+ * Indexes the 522 CONSOB paragraphs.
+ *
+ * The previous corpus was the question/answer pairs of ft.jsonl — the very set
+ * the model was fine-tuned on — so the exact answer to a question ended up in
+ * the prompt and the model copied it verbatim instead of reasoning over the
+ * sources. Paragraphs carry no answer to copy.
+ *
+ * `metadata.answer` is deliberately left unset: SourcesDisplay falls back to
+ * `item.text` (components/SourcesDisplay.tsx:98), which is the paragraph itself.
+ * `source_title` stays 'CONSOB' because getDisplaySourceTitle() already appends
+ * the topic derived from the URL.
+ */
 function loadDocs(): Doc[] {
-  return KNOWLEDGE_BASE.map(e => ({
-    id:   e.id,
-    text: `${e.question}\n\n${e.answer}`,
+  return (PASSAGES as Passage[]).map(p => ({
+    id:   p.passage_id,
+    text: p.text,
     metadata: {
-      source_title: e.metadata?.source_title,
-      source_url:   e.metadata?.source_url,
-      answer:       e.answer,
+      source_title: 'CONSOB',
+      source_url:   p.source_url,
     },
   }));
 }

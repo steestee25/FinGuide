@@ -34,6 +34,14 @@ export const LOCAL_MODELS: Record<string, LocalModel> = {
 
 export const DEFAULT_LOCAL_MODEL_ID = 'gemma3-1b-finance-it';
 
+/**
+ * Load-time parameters for the shared llama context (see lib/llamaContext.ts).
+ * N_CTX matches the model's training length (--max-len 4096).
+ */
+export const N_CTX = 4096;
+export const N_GPU_LAYERS = 1;
+export const N_THREADS = 4;
+
 export const getModel = (id: string = DEFAULT_LOCAL_MODEL_ID): LocalModel => {
   const model = LOCAL_MODELS[id] ?? LOCAL_MODELS[DEFAULT_LOCAL_MODEL_ID];
   if (!model) throw new Error(`Unknown local model: ${id}`);
