@@ -56,15 +56,11 @@ const hexToRgba = (hex: string, alpha = 0.125) => {
   return hex
 }
 
-const STATIC_ADVICES: Advice[] = [
-  {
-    text: 'Questi consigli sono generici e mirano a fornire un punto di partenza. La quantità esatta di denaro destinata a ciascuna categoria dipenderà dalle tue abitudini di spesa e dai tuoi obiettivi finanziari.',
-    category: '',
-  },
-  {
-    text: 'Ti consiglio di monitorare attentamente le tue spese nel tempo per identificare aree in cui puoi apportare modifiche e ottimizzare il tuo budget.',
-    category: '',
-  },
+type Translate = (path: string, vars?: Record<string, string | number>) => string
+
+const staticAdvices = (t: Translate): Advice[] => [
+  { text: t('advicesLabels.disclaimerGeneric'), category: '' },
+  { text: t('advicesLabels.disclaimerMonitor'), category: '' },
 ]
 
 
@@ -334,7 +330,7 @@ export default function Advices() {
       if (!rows.length) {
         setAdvices([
           {
-            text: 'Nessuna spesa trovata per il periodo selezionato.',
+            text: t('advicesLabels.noExpenses'),
             category: 'General',
           },
         ])
@@ -393,8 +389,8 @@ export default function Advices() {
       await generateWithServer(summary)
     } catch (err) {
       console.error('[Fetch] error:', err)
-      setError('Errore nel recupero dei dati.')
-      setAdvices([{ text: 'Errore nel recupero dei dati.', category: 'General' }])
+      setError(t('advicesLabels.fetchError'))
+      setAdvices([{ text: t('advicesLabels.fetchError'), category: 'General' }])
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -404,7 +400,7 @@ export default function Advices() {
 
   const generateWithServer = async (summary: any) => {
     console.log('[Server] starting request to analyze_transaction…')
-    setStatusText(t ? t('advicesLabels.analysis') : 'Analisi in corso...')
+    setStatusText(t('advicesLabels.analysis'))
 
     try {
       const payload = {
@@ -441,7 +437,7 @@ export default function Advices() {
       console.log('[Server] parsed advices:', parsed.length)
 
       if (parsed.length > 0) {
-        setAdvices([...parsed, ...STATIC_ADVICES])
+        setAdvices([...parsed, ...staticAdvices(t)])
       } else {
         console.warn('[Server] parsing yielded 0 advices — using fallback')
         generateFallback(summary)
@@ -449,9 +445,9 @@ export default function Advices() {
     } catch (e) {
       console.error('[Server] error:', e)
       setError(
-        `Errore comunicazione server: ${
-          e instanceof Error ? e.message : 'Sconosciuto'
-        }`
+        t('advicesLabels.serverError', {
+          message: e instanceof Error ? e.message : t('chat.unknownError'),
+        })
       )
       generateFallback(summary)
     } finally {
@@ -464,14 +460,16 @@ export default function Advices() {
     const result: Advice[] = summary.topCategories
       .slice(0, 4)
       .map((c: any) => ({
-        text: `Riduci del 10% le spese in ${c.category}: risparmieresti circa €${Math.round(
-          c.total * 0.1
-        )} (attualmente ${c.pct}% del totale).`,
+        text: t('advicesLabels.fallbackReduce', {
+          category: c.category,
+          amount: Math.round(c.total * 0.1),
+          pct: c.pct,
+        }),
         category: c.category,
       }))
     if (!result.length) {
       result.push({
-        text: 'Imposta un budget mensile per le categorie principali.',
+        text: t('advicesLabels.fallbackBudget'),
         category: 'General',
       })
     }
@@ -537,7 +535,7 @@ export default function Advices() {
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
-            {t ? t('tabs.analysis') : 'Consigli'}
+            {t('tabs.analysis')}
           </Text>
           <TouchableOpacity
             onPress={cycleProficiencyLevel}
@@ -676,7 +674,7 @@ export default function Advices() {
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <ActivityIndicator color={COLORS.primary} />
             <Text style={{ marginTop: 12, color: '#888', fontSize: 14 }}>
-              {statusText || t ? t('advicesLabels.analysis') : 'Analisi in corso...'}
+              {statusText || t('advicesLabels.analysis')}
             </Text>
           </View>
         ) : (
@@ -689,7 +687,7 @@ export default function Advices() {
                 color: '#333',
               }}
             >
-              {t ? t('advicesLabels.advices') : 'Consigli'}
+              {t('advicesLabels.advices')}
             </Text>
 
             {advices.map((item, idx) => {

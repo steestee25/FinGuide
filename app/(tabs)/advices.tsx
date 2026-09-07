@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS } from '../../constants/color'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTranslation } from '../../lib/i18n'
+import { downloadUrl, getModel, minValidSize, modelPath } from '../../lib/modelConfig'
 import {
   fetchExpensesByCategoryLast3Months,
   fetchExpensesByCategoryLastMonth,
@@ -37,9 +38,7 @@ if (Platform.OS !== 'web') {
   releaseAllLlama = llamaModule.releaseAllLlama
 }
 
-const MODEL_FILENAME = 'gemma-3-1b-it-Q8_0.gguf'
-const MODEL_DOWNLOAD_URL =
-  'https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q8_0.gguf'
+const MODEL = getModel()
 
 type PeriodType = 'month' | '3months' | 'year'
 
@@ -65,15 +64,11 @@ const hexToRgba = (hex: string, alpha = 0.125) => {
   return hex
 }
 
-const STATIC_ADVICES: Advice[] = [
-  {
-    text: 'Questi consigli sono generici e mirano a fornire un punto di partenza. La quantità esatta di denaro destinata a ciascuna categoria dipenderà dalle tue abitudini di spesa e dai tuoi obiettivi finanziari.',
-    category: '',
-  },
-  {
-    text: 'Ti consiglio di monitorare attentamente le tue spese nel tempo per identificare aree in cui puoi apportare modifiche e ottimizzare il tuo budget.',
-    category: '',
-  },
+type Translate = (path: string, vars?: Record<string, string | number>) => string
+
+const staticAdvices = (t: Translate): Advice[] => [
+  { text: t('advicesLabels.disclaimerGeneric'), category: '' },
+  { text: t('advicesLabels.disclaimerMonitor'), category: '' },
 ]
 
 /**
@@ -247,9 +242,7 @@ export default function Advices() {
     initModel()
   }, [])
 
-  const getModelPath = () => `${RNFS.DocumentDirectoryPath}/${MODEL_FILENAME}`
-
-  const MIN_MODEL_SIZE = 500_000_000 
+  const getModelPath = () => modelPath(MODEL)
 
   const initModel = async () => {
     setModelLoading(true)
@@ -264,39 +257,39 @@ export default function Advices() {
       if (exists) {
         const stat = await RNFS.stat(path)
         console.log('[Model] cached file size:', stat.size, 'bytes')
-        if (stat.size < MIN_MODEL_SIZE) {
+        if (stat.size < minValidSize(MODEL)) {
           console.warn('[Model] file corrotto — eliminazione e re-download…')
           await RNFS.unlink(path)
         }
       }
       if (!(await RNFS.exists(path))) {
-        console.log('[Model] starting download from:', MODEL_DOWNLOAD_URL)
-        setStatusText('Download modello in corso…')
+        console.log('[Model] starting download from:', downloadUrl(MODEL))
+        setStatusText(t('model.downloading'))
         const dl = await RNFS.downloadFile({
-          fromUrl: MODEL_DOWNLOAD_URL,
+          fromUrl: downloadUrl(MODEL),
           toFile: path,
           progressDivider: 5, 
           begin: (res: any) => {
             console.log('[Model] download started — expected size:', res.contentLength, 'bytes')
-            setStatusText('Download: 0%')
+            setStatusText(t('model.downloadPercent', { pct: 0 }))
           },
           progress: (res: any) => {
             if (!res.contentLength || res.contentLength <= 0) {
               console.log(`[Model] download ${res.bytesWritten} bytes (size unknown)`)
-              setStatusText(`Download: ${Math.round(res.bytesWritten / 1_000_000)} MB…`)
+              setStatusText(t('model.downloadMb', { mb: Math.round(res.bytesWritten / 1_000_000) }))
               return
             }
             const pct = Math.round((res.bytesWritten / res.contentLength) * 100)
             console.log(`[Model] download ${pct}% — ${Math.round(res.bytesWritten / 1_000_000)}/${Math.round(res.contentLength / 1_000_000)} MB`)
-            setStatusText(`Download: ${pct}%`)
+            setStatusText(t('model.downloadPercent', { pct }))
           },
         }).promise
         console.log('[Model] download done — statusCode:', dl.statusCode, 'bytes:', dl.bytesWritten)
 
         const stat = await RNFS.stat(path)
         console.log('[Model] file size after download:', stat.size, 'bytes')
-        if (stat.size < 100_000) {
-          throw new Error(`File troppo piccolo (${stat.size} bytes)`)
+        if (stat.size < minValidSize(MODEL)) {
+          throw new Error(t('model.fileTooSmallShort', { size: stat.size }))
         }
       }
 
@@ -307,7 +300,7 @@ export default function Advices() {
       }
 
       console.log('[Model] calling initLlama…')
-      setStatusText((t ? t('advicesLabels.modelLoading') : 'Caricamento del modello'))
+      setStatusText(t('advicesLabels.modelLoading'))
       contextRef.current = await initLlama({
         model: path,
         use_mlock: true,
@@ -330,7 +323,7 @@ export default function Advices() {
         setRefreshing(false)
       }
     } catch (e: any) {
-      const msg = e?.message ?? 'Errore caricamento modello'
+      const msg = e?.message ?? t('model.loadErrorTitle')
       setModelError(msg)
       console.error('[Model] init error:', msg, e)
       if (pendingSummaryRef.current) {
@@ -380,7 +373,7 @@ export default function Advices() {
       console.log('[Fetch] rows:', rows.length, 'period:', period)
 
       if (!rows.length) {
-        setAdvices([{ text: 'Nessuna spesa trovata per il periodo selezionato.', category: 'General' }])
+        setAdvices([{ text: t('advicesLabels.noExpenses'), category: 'General' }])
         return
       }
 
@@ -431,7 +424,7 @@ export default function Advices() {
       }
     } catch (err) {
       console.error('[Fetch] error:', err)
-      setAdvices([{ text: 'Errore nel recupero dei dati.', category: 'General' }])
+      setAdvices([{ text: t('advicesLabels.fetchError'), category: 'General' }])
     } finally {
       isFetchingRef.current = false
       if (!pendingSummaryRef.current) {
@@ -477,7 +470,7 @@ export default function Advices() {
 
     isGeneratingRef.current = true
     console.log('[Inference] starting generation…')
-    setStatusText((t ? t('advicesLabels.advicesGeneration') : 'Generazione dei consigli...'))
+    setStatusText(t('advicesLabels.advicesGeneration'))
     let fullResponse = ''
 
     try {
@@ -505,7 +498,7 @@ export default function Advices() {
       console.log('[Inference] parsed advices:', parsed.length)
 
       if (parsed.length) {
-        setAdvices([...parsed, ...STATIC_ADVICES])
+        setAdvices([...parsed, ...staticAdvices(t)])
       } else {
         console.warn('[Inference] JSON parse failed — using fallback')
         generateFallback(summary)
@@ -540,11 +533,15 @@ export default function Advices() {
   const generateFallback = (summary: any) => {
     console.log('[Fallback] generating from summary')
     const result: Advice[] = summary.topCategories.slice(0, 4).map((c: any) => ({
-      text: `Riduci del 10% le spese in ${c.category}: risparmieresti circa €${Math.round(c.total * 0.1)} (attualmente ${c.pct}% del totale).`,
+      text: t('advicesLabels.fallbackReduce', {
+        category: c.category,
+        amount: Math.round(c.total * 0.1),
+        pct: c.pct,
+      }),
       category: c.category,
     }))
     if (!result.length) {
-      result.push({ text: 'Imposta un budget mensile per le categorie principali.', category: 'General' })
+      result.push({ text: t('advicesLabels.fallbackBudget'), category: 'General' })
     }
     setAdvices(result)
   }
@@ -593,7 +590,7 @@ export default function Advices() {
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: HORIZONTAL_GUTTER, justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
-          {t ? t('tabs.analysis') : 'Consigli'}
+          {t('tabs.analysis')}
         </Text>
 
       </View>
@@ -603,10 +600,10 @@ export default function Advices() {
         {(['month', '3months', 'year'] as PeriodType[]).map((p) => {
           const label =
             p === 'month'
-              ? (t ? t('advicesLabels.lastMonth') : 'Ultimo mese')
+              ? t('advicesLabels.lastMonth')
               : p === '3months'
-                ? (t ? t('advicesLabels.threeMonths') : '3 Mesi')
-                : (t ? t('advicesLabels.lastYear') : "Quest'anno")
+                ? t('advicesLabels.threeMonths')
+                : t('advicesLabels.lastYear')
           return (
             <TouchableOpacity
               key={p}
@@ -682,13 +679,13 @@ export default function Advices() {
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <ActivityIndicator color={COLORS.primary} />
             <Text style={{ marginTop: 12, color: '#888', fontSize: 14 }}>
-              {statusText || t ? t('advicesLabels.analysis') : 'Analisi in corso...'}
+              {statusText || t('advicesLabels.analysis')}
             </Text>
           </View>
         ) : (
           <>
             <Text style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>
-              {t ? t('advicesLabels.advices') : 'Consigli'}
+              {t('advicesLabels.advices')}
             </Text>
             {advices.map((item, idx) => {
               const baseColor = getCategoryBaseColor(item.category)

@@ -14,7 +14,14 @@
             "advices": "Advices",
             "modelLoading": "Loading model...",
             "advicesGeneration": "Generating advices...",
-            "analysis": "Analysis in progress..."
+            "analysis": "Analysis in progress...",
+            "noExpenses": "No expenses found for the selected period.",
+            "fetchError": "Error retrieving data.",
+            "serverError": "Server communication error: {message}",
+            "disclaimerGeneric": "These tips are generic and meant as a starting point. The exact amount to allocate to each category depends on your spending habits and financial goals.",
+            "disclaimerMonitor": "Keep a close eye on your spending over time to spot areas you can adjust and optimise your budget.",
+            "fallbackReduce": "Cut spending in {category} by 10%: you would save about €{amount} (currently {pct}% of the total).",
+            "fallbackBudget": "Set a monthly budget for your main categories."
         },
         "common": {
             "next": "Next",
@@ -30,7 +37,20 @@
         },
         "chat": {
             "sources": "Sources",
-            "retrievedSources": "Retrieved Sources"
+            "retrievedSources": "Retrieved Sources",
+            "retrieval": "Retrieval",
+            "level": "Level",
+            "modelNotLoadedTitle": "Model Not Loaded",
+            "modelNotLoadedMessage": "Please load the model first.",
+            "inputErrorTitle": "Input Error",
+            "inputErrorMessage": "Please enter a message.",
+            "inferenceErrorTitle": "Error During Inference",
+            "unknownError": "An unknown error occurred.",
+            "preview": "Preview",
+            "errorTitle": "Error",
+            "emptyMessage": "Please enter a message before sending.",
+            "cannotOpenLink": "Unable to open the link",
+            "errorPrefix": "Error: {message}"
         },
         "errorDialog": {
             "title": "Oops!",
@@ -222,7 +242,10 @@
             "deleteAccountTitle": "Delete Account",
             "deleteAccountMessage": "Are you sure you want to delete your account? This action cannot be undone.",
             "deleteAccountConfirm": "Delete",
-            "setLanguage": "Set Language"
+            "setLanguage": "Set Language",
+            "username": "Username",
+            "email": "Email",
+            "fullName": "Full name"
         },
         "changePassword": {
             "title": "Change Password",
@@ -382,6 +405,26 @@
             "title": "Transactions",
             "placeholder": "Search",
             "noResults": "No transactions found"
+        },
+        "model": {
+            "preparing": "Preparing model",
+            "retry": "Tap to retry",
+            "loadFailed": "Could not load the model.",
+            "errorTitle": "Model error",
+            "loadErrorTitle": "Error Loading Model",
+            "fileMissing": "The model file does not exist at: {path}",
+            "fileTooSmall": "Model file is too small ({size} bytes). It may be corrupted.",
+            "fileTooSmallShort": "File too small ({size} bytes)",
+            "loadedTitle": "Model Loaded",
+            "loadedMessage": "The model was successfully loaded.",
+            "quantHint": "Tip: some model quantizations may not be supported. Try the Q4_K_M or Q5_K_M versions.",
+            "initError": "Error initializing the model.",
+            "loadAfterDownloadError": "Error loading the model after download.",
+            "downloadUnknownError": "Unknown error while downloading or loading the model.",
+            "invalidPath": "Invalid download path.",
+            "downloading": "Downloading model…",
+            "downloadPercent": "Download: {pct}%",
+            "downloadMb": "Download: {mb} MB…"
         }
     },
     "it": {
@@ -396,7 +439,17 @@
             "lastMonth": "Questo Mese",
             "threeMonths": "3 Mesi",
             "lastYear": "Ultimo Anno",
-            "advices": "Consigli"
+            "advices": "Consigli",
+            "modelLoading": "Caricamento del modello...",
+            "advicesGeneration": "Generazione dei consigli...",
+            "analysis": "Analisi in corso...",
+            "noExpenses": "Nessuna spesa trovata per il periodo selezionato.",
+            "fetchError": "Errore nel recupero dei dati.",
+            "serverError": "Errore comunicazione server: {message}",
+            "disclaimerGeneric": "Questi consigli sono generici e mirano a fornire un punto di partenza. La quantità esatta di denaro destinata a ciascuna categoria dipenderà dalle tue abitudini di spesa e dai tuoi obiettivi finanziari.",
+            "disclaimerMonitor": "Ti consiglio di monitorare attentamente le tue spese nel tempo per identificare aree in cui puoi apportare modifiche e ottimizzare il tuo budget.",
+            "fallbackReduce": "Riduci del 10% le spese in {category}: risparmieresti circa €{amount} (attualmente {pct}% del totale).",
+            "fallbackBudget": "Imposta un budget mensile per le categorie principali."
         },
         "common": {
             "next": "Avanti",
@@ -412,7 +465,20 @@
         },
         "chat": {
             "sources": "Fonti",
-            "retrievedSources": "Fonti recuperate"
+            "retrievedSources": "Fonti recuperate",
+            "retrieval": "Retrieval",
+            "level": "Livello",
+            "modelNotLoadedTitle": "Modello non caricato",
+            "modelNotLoadedMessage": "Carica prima il modello.",
+            "inputErrorTitle": "Errore di input",
+            "inputErrorMessage": "Inserisci un messaggio.",
+            "inferenceErrorTitle": "Errore durante l’inferenza",
+            "unknownError": "Si è verificato un errore sconosciuto.",
+            "preview": "Anteprima",
+            "errorTitle": "Errore",
+            "emptyMessage": "Inserisci un messaggio prima di inviare.",
+            "cannotOpenLink": "Impossibile aprire il link",
+            "errorPrefix": "Errore: {message}"
         },
         "errorDialog": {
             "title": "Ops!",
@@ -604,7 +670,10 @@
             "deleteAccountTitle": "Elimina account",
             "deleteAccountMessage": "Sei sicuro di voler eliminare il tuo account? Questa azione non può essere annullata.",
             "deleteAccountConfirm": "Elimina",
-            "setLanguage": "Imposta lingua"
+            "setLanguage": "Imposta lingua",
+            "username": "Nome utente",
+            "email": "Email",
+            "fullName": "Nome completo"
         },
         "changePassword": {
             "title": "Cambia password",
@@ -764,6 +833,26 @@
         "celebration": {
             "congrats": "Complimenti!",
             "message": "Hai completato la configurazione"
+        },
+        "model": {
+            "preparing": "Preparazione del modello",
+            "retry": "Tocca per riprovare",
+            "loadFailed": "Impossibile caricare il modello.",
+            "errorTitle": "Errore modello",
+            "loadErrorTitle": "Errore caricamento modello",
+            "fileMissing": "Il file del modello non esiste in: {path}",
+            "fileTooSmall": "Il file del modello è troppo piccolo ({size} byte). Potrebbe essere corrotto.",
+            "fileTooSmallShort": "File troppo piccolo ({size} byte)",
+            "loadedTitle": "Modello caricato",
+            "loadedMessage": "Il modello è stato caricato correttamente.",
+            "quantHint": "Suggerimento: alcune quantizzazioni potrebbero non essere supportate. Prova le versioni Q4_K_M o Q5_K_M.",
+            "initError": "Errore durante l’inizializzazione del modello.",
+            "loadAfterDownloadError": "Errore durante il caricamento del modello dopo il download.",
+            "downloadUnknownError": "Errore sconosciuto durante il download o il caricamento del modello.",
+            "invalidPath": "Percorso di download non valido.",
+            "downloading": "Download modello in corso…",
+            "downloadPercent": "Download: {pct}%",
+            "downloadMb": "Download: {mb} MB…"
         }
     }
 }

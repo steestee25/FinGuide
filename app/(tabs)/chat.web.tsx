@@ -288,7 +288,7 @@ export default function Chat(): React.JSX.Element {
     const messageToSend = message || userInput.trim();
 
     if (!messageToSend) {
-      Alert.alert('Errore', 'Inserisci un messaggio prima di inviare.');
+      Alert.alert(t('chat.errorTitle'), t('chat.emptyMessage'));
       return;
     }
 
@@ -329,7 +329,7 @@ export default function Chat(): React.JSX.Element {
       console.error(err);
       setConversation(prev => [
         ...prev,
-        { role: 'assistant', content: `Errore: ${err.message}` },
+        { role: 'assistant', content: t('chat.errorPrefix', { message: err.message }) },
       ]);
     } finally {
       setIsGenerating(false);
@@ -427,7 +427,7 @@ export default function Chat(): React.JSX.Element {
               onOpenUrl={(url) => {
                 Linking.openURL(url).catch(err => {
                   console.error('Errore apertura URL:', err);
-                  Alert.alert('Errore', 'Impossibile aprire il link');
+                  Alert.alert(t('chat.errorTitle'), t('chat.cannotOpenLink'));
                 });
               }}
             />

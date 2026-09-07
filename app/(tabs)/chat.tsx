@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
@@ -24,6 +23,7 @@ import ProgressBar from '@/components/ProgressBar';
 // Import utilities
 import { SourcesDisplay } from '@/components/SourcesDisplay';
 import { downloadModel } from '@/lib/downloadModel';
+import { cleanupLegacyModels, downloadUrl, getModel, minValidSize, modelPath } from '@/lib/modelConfig';
 import { useTranslation } from '@/lib/i18n';
 import {
   initializeLocalModels
@@ -142,6 +142,8 @@ const QUESTION_CATEGORIES: Category[] = [
   },
 ];
 
+const MODEL = getModel();
+
 // ===================== Main Chat Component =====================
 
 export default function Chat(): React.JSX.Element {
@@ -153,7 +155,7 @@ export default function Chat(): React.JSX.Element {
 
   const { resetMessages, rag } = useLocalSearchParams();
   const ragParam = Array.isArray(rag) ? rag[0] : rag;
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
 
   if (Platform.OS === 'web') {
     return (
@@ -173,10 +175,6 @@ export default function Chat(): React.JSX.Element {
       Non inventare dettagli né fornire consigli di investimento specifici.`,
     },
   ];
-
-  const MODEL_ALIAS = 'Gemma3-1B-Mine';
-  const MODEL_REPO = 'Stee201/gguf-server-q';
-  const MODEL_CACHE_NAME = 'Gemma3-1B-Mine.gguf';
 
   const [conversation, setConversation] = useState<Message[]>(INITIAL_CONVERSATION);
   const [userInput, setUserInput] = useState<string>('');
@@ -216,16 +214,16 @@ export default function Chat(): React.JSX.Element {
   };
 
   function formatTitleFromUrl(urlStr: string | null): string {
-    if (!urlStr) return 'Anteprima';
+    if (!urlStr) return t('chat.preview');
     try {
       const url = new URL(urlStr);
       const pathname = url.pathname.split('/').filter(p => p.length > 0);
       const last = pathname[pathname.length - 1] || '';
-      if (!last) return (url.hostname || 'Anteprima').replace(/^www\./, '').toUpperCase();
+      if (!last) return (url.hostname || t('chat.preview')).replace(/^www\./, '').toUpperCase();
       const words = last.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
       return words.join(' ');
     } catch (e) {
-      return 'Anteprima';
+      return t('chat.preview');
     }
   }
   const [proficiencyLevel, setProficiencyLevel] = useState<string>('intermediate');
@@ -256,11 +254,13 @@ export default function Chat(): React.JSX.Element {
   useEffect(() => {
     const initModels = async () => {
       try {
+        await cleanupLegacyModels();
         const models = await initializeLocalModels();
 
-        const existingModel = models.find(m => m.modelName === MODEL_ALIAS);
+        // downloadModel() registers models under their file name, not the alias.
+        const existingModel = models.find(m => m.modelName === MODEL.cacheName);
         if (existingModel) {
-          const loaded = await loadModel(existingModel.modelName);
+          const loaded = await loadModel();
           if (loaded) {
             setCurrentPage('conversation');
             return;
@@ -270,7 +270,7 @@ export default function Chat(): React.JSX.Element {
         await downloadAndLoadModel();
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : 'Errore durante l\'inizializzazione del modello.';
+          error instanceof Error ? error.message : t('model.initError');
         setModelLoadError(errorMessage);
         console.error('Error initializing models:', error);
       } finally {
@@ -301,56 +301,36 @@ export default function Chat(): React.JSX.Element {
     loadUserProficiency();
   }, []);
 
-  const fetchGgufFileFromRepo = async (): Promise<string> => {
-    const response = await axios.get(`https://huggingface.co/api/models/${MODEL_REPO}`);
-    if (!response.data?.siblings) {
-      throw new Error('Invalid Hugging Face API response.');
-    }
-
-    const ggufFiles = response.data.siblings.filter(
-      (file: { rfilename: string }) => file.rfilename.endsWith('.gguf'),
-    );
-
-    if (ggufFiles.length === 0) {
-      throw new Error('Nessun file .gguf trovato nel repository del modello.');
-    }
-
-    return ggufFiles[0].rfilename;
-  };
-
   const downloadAndLoadModel = async () => {
     setIsPreparingModel(true);
     setProgress(0);
     setModelLoadError(null);
 
     try {
-      const modelFile = await fetchGgufFileFromRepo();
-      const downloadUrl = `https://huggingface.co/${MODEL_REPO}/resolve/main/${modelFile}`;
-
       const destPath = await downloadModel(
-        MODEL_CACHE_NAME,
-        downloadUrl,
+        MODEL.cacheName,
+        downloadUrl(MODEL),
         progress => setProgress(progress),
         false,
-        MODEL_ALIAS,
+        MODEL.label,
       );
 
       if (!destPath) {
-        throw new Error('Percorso di download non valido.');
+        throw new Error(t('model.invalidPath'));
       }
 
       await initializeLocalModels();
 
-      const loaded = await loadModel(MODEL_CACHE_NAME);
+      const loaded = await loadModel();
       if (!loaded) {
-        throw new Error('Errore durante il caricamento del modello dopo il download.');
+        throw new Error(t('model.loadAfterDownloadError'));
       }
 
       setCurrentPage('conversation');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto durante il download o caricamento del modello.';
+      const errorMessage = error instanceof Error ? error.message : t('model.downloadUnknownError');
       setModelLoadError(errorMessage);
-      Alert.alert('Errore modello', errorMessage);
+      Alert.alert(t('model.errorTitle'), errorMessage);
       console.error('Error downloading or loading model:', error);
     } finally {
       setIsPreparingModel(false);
@@ -386,13 +366,13 @@ export default function Chat(): React.JSX.Element {
 
     if (!context) {
       isSendingRef.current = false;
-      Alert.alert('Model Not Loaded', 'Please load the model first.');
+      Alert.alert(t('chat.modelNotLoadedTitle'), t('chat.modelNotLoadedMessage'));
       return;
     }
 
     if (!messageToSend) {
       isSendingRef.current = false;
-      Alert.alert('Input Error', 'Please enter a message.');
+      Alert.alert(t('chat.inputErrorTitle'), t('chat.inputErrorMessage'));
       return;
     }
 
@@ -522,8 +502,8 @@ export default function Chat(): React.JSX.Element {
       }
     } catch (error) {
       Alert.alert(
-        'Error During Inference',
-        error instanceof Error ? error.message : 'An unknown error occurred.',
+        t('chat.inferenceErrorTitle'),
+        error instanceof Error ? error.message : t('chat.unknownError'),
       );
     } finally {
       setIsGenerating(false);
@@ -531,24 +511,24 @@ export default function Chat(): React.JSX.Element {
     }
   };
 
-  const loadModel = async (modelName: string) => {
+  const loadModel = async () => {
     try {
-      const destPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
+      const destPath = modelPath(MODEL);
 
-      console.log('[LoadModel] Attempting to load:', modelName);
+      console.log('[LoadModel] Attempting to load:', MODEL.cacheName);
       console.log('[LoadModel] Path:', destPath);
 
       const fileExists = await RNFS.exists(destPath);
       if (!fileExists) {
-        Alert.alert('Error Loading Model', 'The model file does not exist at: ' + destPath);
+        Alert.alert(t('model.loadErrorTitle'), t('model.fileMissing', { path: destPath }));
         return false;
       }
 
       const fileStats = await RNFS.stat(destPath);
       console.log('[LoadModel] File size:', fileStats.size, 'bytes');
 
-      if (fileStats.size < 100000) {
-        Alert.alert('Error Loading Model', 'Model file is too small (' + fileStats.size + ' bytes). May be corrupted.');
+      if (fileStats.size < minValidSize(MODEL)) {
+        Alert.alert(t('model.loadErrorTitle'), t('model.fileTooSmall', { size: fileStats.size }));
         return false;
       }
 
@@ -569,16 +549,16 @@ export default function Chat(): React.JSX.Element {
 
       console.log('[LoadModel] Success! Context created');
       setContext(llamaContext);
-      Alert.alert('Model Loaded', 'The model was successfully loaded.');
+      Alert.alert(t('model.loadedTitle'), t('model.loadedMessage'));
       return true;
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred.';
+      const errorMsg = error instanceof Error ? error.message : t('chat.unknownError');
       console.error('[LoadModel] Error:', errorMsg);
       console.error('[LoadModel] Full error:', error);
 
       Alert.alert(
-        'Error Loading Model',
-        errorMsg + '\n\nTip: Some model quantizations may not be supported. Try Q4_K_M or Q5_K_M versions.'
+        t('model.loadErrorTitle'),
+        errorMsg + '\n\n' + t('model.quantHint')
       );
       return false;
     }
@@ -590,16 +570,16 @@ export default function Chat(): React.JSX.Element {
         {(isPreparingModel || isInitializingModels) && (
           <View style={appStyles.card}>
             <Text style={appStyles.subtitle}>
-              {locale?.startsWith('en') ? 'Preparing model' : 'Preparazione del modello'}
+              {t('model.preparing')}
             </Text>
-            <Text style={appStyles.subtitle2}>{MODEL_ALIAS}</Text>
+            <Text style={appStyles.subtitle2}>{MODEL.label}</Text>
             <ProgressBar progress={progress} />
             {modelLoadError ? (
               <Text style={appStyles.errorText}>{modelLoadError}</Text>
             ) : null}
             {modelLoadError ? (
               <Text style={appStyles.retryText} onPress={retryModelInit}>
-                Tocca per riprovare
+                {t('model.retry')}
               </Text>
             ) : null}
           </View>
@@ -678,7 +658,7 @@ export default function Chat(): React.JSX.Element {
                     <View style={appStyles.sheetTitleRow}>
                       <View style={appStyles.sheetTitleContainer}>
                         <Text style={appStyles.sheetTitle}>
-                          {locale?.startsWith('en') ? 'Retrieved Sources' : 'Fonti recuperate'}
+                          {t('chat.retrievedSources')}
                         </Text>
                         <Text style={appStyles.sheetCount}>{selectedSources.length}</Text>
                       </View>
@@ -726,7 +706,7 @@ export default function Chat(): React.JSX.Element {
                 <View style={[appStyles.sheetContainer, appStyles.webViewModalContainer]}>
                   <View style={appStyles.sheetTitleRow}>
                     <View style={appStyles.sheetTitleContainer}>
-                      <Text style={appStyles.sheetTitle}>{webViewTitle || 'Anteprima'}</Text>
+                      <Text style={appStyles.sheetTitle}>{webViewTitle || t('chat.preview')}</Text>
                     </View>
                     <View style={appStyles.iconClose}>
                       <TouchableOpacity
@@ -830,7 +810,7 @@ export default function Chat(): React.JSX.Element {
 
         {!isPreparingModel && !isInitializingModels && !context && modelLoadError && (
           <View style={appStyles.card}>
-            <Text style={appStyles.subtitle}>Impossibile caricare il modello.</Text>
+            <Text style={appStyles.subtitle}>{t('model.loadFailed')}</Text>
             <Text style={appStyles.errorText}>{modelLoadError}</Text>
           </View>
         )}

@@ -4,6 +4,7 @@ import Octicons from '@expo/vector-icons/Octicons';
 import { Tabs, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import ChatOptionsSelector from '../../components/ChatOptionsSelector';
 import ModelSelector from '../../components/ModelSelector';
 import { COLORS } from '../../constants/color';
 
@@ -15,6 +16,10 @@ export const LEVEL_CONFIG: Record<ProficiencyLevel, { label: string; icon: 'sign
   intermediate: { label: 'Intermediate', icon: 'signal-cellular-2' },
   advanced: { label: 'Advanced', icon: 'signal-cellular-3' },
 };
+
+// The mobile header is width-constrained, so RAG + level collapse into a single
+// grouped selector there; the web header keeps them as separate pills.
+const isNative = Platform.OS !== 'web';
 
 const CHAT_MODEL_OPTIONS = [
   { key: 'call_gemma_1b', label: 'Gemma 1B' },
@@ -111,6 +116,7 @@ export default function TabLayout() {
                                 <MaterialIcons name="arrow-back" size={28} color={COLORS.black} />
                             </HeaderButton>
                             <ModelSelector
+                                compact={isNative}
                                 models={CHAT_MODEL_OPTIONS}
                                 selectedKey={typeof model === 'string' ? model : undefined}
                                 onSelect={(selected) => {
@@ -120,49 +126,79 @@ export default function TabLayout() {
                                     });
                                 }}
                             />
-                            <Pressable
-                                onPress={() => {
-                                    const nextRag = !isRagEnabled;
-                                    setIsRagEnabled(nextRag);
-                                    router.setParams({
-                                        rag: nextRag ? '1' : '0',
-                                        model: typeof model === 'string' ? model : undefined,
-                                    });
-                                }}
-                                style={[styles.ragButton, !isRagEnabled && styles.ragButtonDisabled]}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <MaterialCommunityIcons
-                                    name={isRagEnabled ? 'database' : 'database-off'}
-                                    size={18}
-                                    color={isRagEnabled ? COLORS.primary : '#94a3b8'}
+                            {isNative ? (
+                                <ChatOptionsSelector
+                                    ragEnabled={isRagEnabled}
+                                    onToggleRag={(next) => {
+                                        setIsRagEnabled(next);
+                                        router.setParams({
+                                            rag: next ? '1' : '0',
+                                            model: typeof model === 'string' ? model : undefined,
+                                        });
+                                    }}
+                                    levels={PROFICIENCY_LEVELS.map((l) => ({
+                                        key: l,
+                                        label: LEVEL_CONFIG[l].label,
+                                        icon: LEVEL_CONFIG[l].icon,
+                                    }))}
+                                    selectedLevelKey={proficiencyLevel}
+                                    onSelectLevel={(key) => {
+                                        setProficiencyLevel(key as ProficiencyLevel);
+                                        router.setParams({
+                                            level: key,
+                                            model: typeof model === 'string' ? model : undefined,
+                                        });
+                                    }}
                                 />
-                                <Text style={[styles.ragButtonText, !isRagEnabled && styles.ragButtonTextDisabled]}>
-                                    {isRagEnabled ? 'RAG On' : 'RAG Off'}
-                                </Text>
-                            </Pressable>
-                            <Pressable
-                                onPress={() => {
-                                    const currentIndex = PROFICIENCY_LEVELS.indexOf(proficiencyLevel);
-                                    const nextLevel = PROFICIENCY_LEVELS[(currentIndex + 1) % PROFICIENCY_LEVELS.length];
-                                    setProficiencyLevel(nextLevel);
-                                    router.setParams({
-                                        level: nextLevel,
-                                        model: typeof model === 'string' ? model : undefined,
-                                    });
-                                }}
-                                style={styles.levelButton}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <MaterialCommunityIcons
-                                    name={LEVEL_CONFIG[proficiencyLevel].icon}
-                                    size={18}
-                                    color={COLORS.primary}
-                                />
-                                <Text style={styles.levelButtonText}>
-                                    {LEVEL_CONFIG[proficiencyLevel].label}
-                                </Text>
-                            </Pressable>
+                            ) : (
+                                <>
+                                <Pressable
+                                    onPress={() => {
+                                        const nextRag = !isRagEnabled;
+                                        setIsRagEnabled(nextRag);
+                                        router.setParams({
+                                            rag: nextRag ? '1' : '0',
+                                            model: typeof model === 'string' ? model : undefined,
+                                        });
+                                    }}
+                                    style={[styles.ragButton, !isRagEnabled && styles.ragButtonDisabled]}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={isRagEnabled ? 'RAG On' : 'RAG Off'}
+                                >
+                                    <MaterialCommunityIcons
+                                        name={isRagEnabled ? 'database' : 'database-off'}
+                                        size={18}
+                                        color={isRagEnabled ? COLORS.primary : '#94a3b8'}
+                                    />
+                                    <Text style={[styles.ragButtonText, !isRagEnabled && styles.ragButtonTextDisabled]}>
+                                        {isRagEnabled ? 'RAG On' : 'RAG Off'}
+                                    </Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={() => {
+                                        const currentIndex = PROFICIENCY_LEVELS.indexOf(proficiencyLevel);
+                                        const nextLevel = PROFICIENCY_LEVELS[(currentIndex + 1) % PROFICIENCY_LEVELS.length];
+                                        setProficiencyLevel(nextLevel);
+                                        router.setParams({
+                                            level: nextLevel,
+                                            model: typeof model === 'string' ? model : undefined,
+                                        });
+                                    }}
+                                    style={styles.levelButton}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <MaterialCommunityIcons
+                                        name={LEVEL_CONFIG[proficiencyLevel].icon}
+                                        size={18}
+                                        color={COLORS.primary}
+                                    />
+                                    <Text style={styles.levelButtonText}>
+                                        {LEVEL_CONFIG[proficiencyLevel].label}
+                                    </Text>
+                                </Pressable>
+                                </>
+                            )}
                         </View>
                     ),
                     headerRight: () => (

@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../constants/color';
@@ -12,6 +11,8 @@ type Props = {
   onSelect?: (model: string) => void;
   selectedKey?: string;
   models?: ModelOption[];
+  /** Narrower layout for width-constrained headers (mobile). */
+  compact?: boolean;
 };
 
 const DEFAULT_MODELS: ModelOption[] = [
@@ -19,7 +20,7 @@ const DEFAULT_MODELS: ModelOption[] = [
   { key: 'qwen2.5-0.5b', label: 'qwen2.5 0.5b' },
 ];
 
-export default function ModelSelector({ onSelect, selectedKey, models = DEFAULT_MODELS }: Props) {
+export default function ModelSelector({ onSelect, selectedKey, models = DEFAULT_MODELS, compact = false }: Props) {
   const [visible, setVisible] = useState(false);
   const [selected, setSelected] = useState(selectedKey ?? models[0].key);
   const [modalPosition, setModalPosition] = useState({ top: 0, left: 0, width: 140 });
@@ -47,16 +48,15 @@ export default function ModelSelector({ onSelect, selectedKey, models = DEFAULT_
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.containerCompact]}>
       <TouchableOpacity 
         ref={buttonRef}
-        style={styles.selectorButton} 
+        style={[styles.selectorButton, compact && styles.selectorButtonCompact]} 
         onPress={openModal}
       >
         <Text numberOfLines={1} style={styles.selectorText}>
           {models.find(m => m.key === selected)?.label ?? 'Select Model'}
         </Text>
-        <Ionicons name="chevron-down" size={16} color={COLORS.temp3} />
       </TouchableOpacity>
 
       <Modal visible={visible} transparent animationType="fade">
@@ -85,6 +85,9 @@ const styles = StyleSheet.create({
   container: {
     marginLeft: 10,
   },
+  containerCompact: {
+    marginLeft: 6,
+  },
   selectorButton: {
     minWidth: 140,
     height: 36,
@@ -99,6 +102,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 3,
     elevation: 3,
+  },
+  selectorButtonCompact: {
+    // Sized to the longest option label ('Gemma 270M'): ~72dp of text at
+    // fontSize 12, + 8 text marginRight + 16 horizontal padding.
+    minWidth: 96,
+    paddingHorizontal: 8,
   },
   selectorText: {
     fontSize: 12,

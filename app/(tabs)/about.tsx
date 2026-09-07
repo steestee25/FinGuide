@@ -145,11 +145,11 @@ export default function AboutScreen() {
 
               <View style={styles.whiteCard}>
                 <View style={styles.row}>
-                  <Text style={styles.rowLabel}>Username</Text>
+                  <Text style={styles.rowLabel}>{t('about.username')}</Text>
                   <Text style={styles.chev}>{displayName}</Text>
                 </View>
                 <View style={styles.row}>
-                  <Text style={styles.rowLabel}>Email</Text>
+                  <Text style={styles.rowLabel}>{t('about.email')}</Text>
                   <Text style={styles.chev}>{displayEmail}</Text>
                 </View>
                 <View style={styles.row}>

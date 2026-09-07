@@ -74,22 +74,22 @@ export default function AccountScreen() {
                     </View>
                 </View>
 
-                <Text style={styles.sectionTitle}>{t ? t('about.accountSettings') : 'Account Details'}</Text>
+                <Text style={styles.sectionTitle}>{t('about.accountSettings')}</Text>
                 <View style={styles.whiteCard}>
                     <View style={styles.row}>
-                        <Text style={styles.rowLabel}>Full name</Text>
+                        <Text style={styles.rowLabel}>{t('about.fullName')}</Text>
                         <Text style={styles.chev}>{profile?.full_name ?? '-'}</Text>
                     </View>
                     <View style={styles.row}>
-                        <Text style={styles.rowLabel}>Email</Text>
+                        <Text style={styles.rowLabel}>{t('about.email')}</Text>
                         <Text style={styles.chev}>{displayEmail}</Text>
                     </View>
                     <View style={styles.row}>
-                        <Text style={styles.rowLabel}>Phone</Text>
+                        <Text style={styles.rowLabel}>{t('about.phone')}</Text>
                         <Text style={styles.chev}>{profile?.phone ?? '-'}</Text>
                     </View>
                     <View style={styles.row}>
-                        <Text style={styles.rowLabel}>Country</Text>
+                        <Text style={styles.rowLabel}>{t('about.country')}</Text>
                         <Text style={styles.chev}>{profile?.country ?? 'Italy'}</Text>
                     </View>
                 </View>
@@ -111,7 +111,7 @@ export default function AccountScreen() {
                             <View style={styles.iconPlaceholderWhite}>
                                 <MaterialCommunityIcons name="trash-can-outline" size={22} color={COLORS.white} />
                             </View>
-                            <Text style={[styles.rowLabel, { color: '#fff' }]}>Cancella account</Text>
+                            <Text style={[styles.rowLabel, { color: '#fff' }]}>{t('about.deleteAccount')}</Text>
                         </View>
                         <Text style={[styles.chev, { color: '#fff', fontSize: 20 }]}>›</Text>
                     </View>
