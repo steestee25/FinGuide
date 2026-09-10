@@ -33,6 +33,10 @@ type Props = {
   onOpenSources?: (sources: any[]) => void;
   answerPhase?: AnimationPhase;
   isFirstQuestion?: boolean;
+  /** Layout of the streaming text: the benchmark's "first token visible". */
+  onStreamingTextLayout?: () => void;
+  /** Layout of the last assistant message: the benchmark's "answer visible". */
+  onLastAssistantLayout?: () => void;
 };
 
 export default function ChatScreen({
@@ -47,6 +51,8 @@ export default function ChatScreen({
   onOpenSources = () => { },
   answerPhase = 'idle',
   isFirstQuestion = false,
+  onStreamingTextLayout,
+  onLastAssistantLayout,
 }: Props): React.JSX.Element {
   const { locale, t } = useTranslation();
   const placeholderText = locale === 'en' ? 'Ask a question' : 'Fai una domanda';
@@ -96,7 +102,12 @@ export default function ChatScreen({
                       style={styles.responseImage}
                     />
                     <View style={styles.responseBody}>
-                      <Text style={styles.responseText}>{msg.content}</Text>
+                      <Text
+                        style={styles.responseText}
+                        onLayout={isLastAssistantMessage ? onLastAssistantLayout : undefined}
+                      >
+                        {msg.content}
+                      </Text>
                     </View>
                     <View style={styles.responseActions}>
                       <TouchableOpacity
@@ -161,7 +172,7 @@ export default function ChatScreen({
                 style={styles.responseImage}
               />
               <View style={styles.responseBody}>
-                <Text style={styles.responseText}>{streamingText}</Text>
+                <Text style={styles.responseText} onLayout={onStreamingTextLayout}>{streamingText}</Text>
               </View>
             </View>
             <View style={styles.disclaimerContainer}>

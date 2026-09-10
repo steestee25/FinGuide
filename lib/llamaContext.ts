@@ -13,18 +13,25 @@ import { Platform } from 'react-native';
 import { getModel, LocalModel, modelPath, N_CTX, N_GPU_LAYERS, N_THREADS } from './modelConfig';
 
 let initLlama: any = null;
-let releaseAllLlama: any = null;
 
 if (Platform.OS !== 'web') {
   const llamaModule = require('llama.rn');
   initLlama = llamaModule.initLlama;
-  releaseAllLlama = llamaModule.releaseAllLlama;
 }
 
 type LlamaContext = any;
 
 let context: LlamaContext | null = null;
 let loading: Promise<LlamaContext> | null = null;
+
+/** Load-time parameters of every model (the benchmark records them). */
+export const contextParams = (model: LocalModel) => ({
+  model: modelPath(model),
+  use_mlock: true,
+  n_ctx: N_CTX,
+  n_gpu_layers: N_GPU_LAYERS,
+  n_threads: N_THREADS,
+});
 
 /**
  * Returns the shared context, loading it on first use. Concurrent callers share
@@ -36,13 +43,7 @@ export async function getLlamaContext(model: LocalModel = getModel()): Promise<L
   if (!loading) {
     loading = (async () => {
       console.log('[Llama] initLlama on shared context:', model.cacheName);
-      const ctx = await initLlama({
-        model: modelPath(model),
-        use_mlock: true,
-        n_ctx: N_CTX,
-        n_gpu_layers: N_GPU_LAYERS,
-        n_threads: N_THREADS,
-      });
+      const ctx = await initLlama(contextParams(model));
       console.log('[Llama] shared context ready');
       return ctx;
     })().catch(e => {
@@ -61,11 +62,15 @@ export const isLlamaReady = (): boolean => context !== null;
 /**
  * Frees the shared context. Only for error recovery — reloading costs a full
  * model load. Safe to call when nothing is loaded.
+ *
+ * Releases this context only: on Android releaseAllLlama() never resolves
+ * (llama.rn 0.9.5), so a recovery through it would hang for good.
  */
 export async function releaseLlamaContext(): Promise<void> {
   if (!context && !loading) return;
   try {
-    await releaseAllLlama();
+    const ctx = context ?? (await loading?.catch(() => null));
+    if (ctx) await ctx.release();
   } catch (e) {
     console.warn('[Llama] release failed:', e);
   } finally {

@@ -94,6 +94,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0.0"
+        // Hidden benchmark screen: `gradlew assembleRelease -PliraBenchmark=true`
+        // (scripts/build-benchmark-apk.js). Off in every other build.
+        buildConfigField "boolean", "LIRA_BENCHMARK", (findProperty('liraBenchmark') ?: 'false').toString()
     }
     signingConfigs {
         debug {

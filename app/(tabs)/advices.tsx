@@ -14,6 +14,8 @@ import { PieChart } from 'react-native-gifted-charts'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS } from '../../constants/color'
 import { useAuth } from '../../contexts/AuthContext'
+import { runAdvicesTurn } from '../../lib/advicesTurn'
+import { summarizeExpenses } from '../../lib/expenses'
 import { useTranslation } from '../../lib/i18n'
 import { getLlamaContext, isLlamaReady, releaseLlamaContext } from '../../lib/llamaContext'
 import { downloadUrl, getModel, minValidSize, modelPath } from '../../lib/modelConfig'
@@ -66,95 +68,6 @@ const staticAdvices = (t: Translate): Advice[] => [
   { text: t('advicesLabels.disclaimerGeneric'), category: '' },
   { text: t('advicesLabels.disclaimerMonitor'), category: '' },
 ]
-
-/**
- * Strip markdown code fences (```json ... ``` or ``` ... ```) from model output.
- */
-function stripCodeFences(raw: string): string {
-  return raw
-    .replace(/^```[a-z]*\n?/i, '')
-    .replace(/\n?```$/i, '')
-    .trim()
-}
-
-/**
- * Try to extract an array of Advice from whatever the model returned.
- * Handles:
- *   - {"advices": [...]}
- *   - {"advice": [...]}
- *   - [...]  (bare array)
- *   - Output wrapped in ```json ... ```
- *   - Malformed output with duplicate "category"/"advice" keys
- */
-function tryParseAdvices(raw: string): Advice[] {
-  const cleaned = stripCodeFences(raw)
-
-  const results: Advice[] = []
-
-  // 1. Strategy: detect all categories
-  const categoryRegex = /"category"\s*:\s*"([^"]+)"/g
-  const categories: string[] = []
-  let match
-
-  while ((match = categoryRegex.exec(cleaned)) !== null) {
-    categories.push(match[1])
-  }
-
-  if (!categories.length) {
-    console.warn('[Parse] no categories found')
-  }
-
-  // 2. Strategy: extract all advice texts globally
-  // works even if duplicated keys or broken JSON
-  const adviceRegex = /"text"\s*:\s*"([\s\S]*?)"|"advice"\s*:\s*"([\s\S]*?)"/g
-
-  const texts: string[] = []
-  while ((match = adviceRegex.exec(cleaned)) !== null) {
-    const value = match[1] || match[2]
-    if (value?.trim()) texts.push(value.trim())
-  }
-
-  // fallback for your old "advice": ...
-  const looseAdviceRegex = /"advice"\s*:\s*"([\s\S]*?)"/g
-  while ((match = looseAdviceRegex.exec(cleaned)) !== null) {
-    const value = match[1]
-    if (value?.trim()) texts.push(value.trim())
-  }
-
-  if (!texts.length) {
-    console.warn('[Parse] no advice texts found')
-    return []
-  }
-
-  // 3. Map: distribute advices across categories
-  // assumption: 3 advices per category (your requirement)
-  const perCategory = 3
-
-  let textIndex = 0
-
-  for (const cat of categories) {
-    for (let i = 0; i < perCategory; i++) {
-      if (!texts[textIndex]) break
-
-      results.push({
-        category: cat,
-        text: texts[textIndex],
-      })
-
-      textIndex++
-    }
-  }
-
-  console.log(
-    '[Parse] extracted:',
-    results.length,
-    'advices for',
-    categories.length,
-    'categories'
-  )
-
-  return results
-}
 
 export default function Advices() {
   const { session, loading: authLoading } = useAuth()
@@ -360,9 +273,7 @@ export default function Advices() {
         return
       }
 
-      // 2. Build pie data and summary
-      const total = rows.reduce((s: number, r: any) => s + (r.total ?? 0), 0)
-
+      // 2. Build pie data
       // Find index of highest expense category
       const maxIndex = rows.reduce((acc: number, cur: any, i: number) =>
         (cur.total > (rows[acc]?.total || 0) ? i : acc), 0)
@@ -381,16 +292,8 @@ export default function Advices() {
       setPieData(mapped)
       setSelectedIndex(maxIndex)
 
-      // 3. Build compact summary for LLM
-      const topCategories = [...rows]
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 6)
-        .map((r: any) => ({
-          category: r.category,
-          total: Math.round(r.total),
-          pct: total ? Math.round((r.total / total) * 100) : 0,
-        }))
-      const summary = { total: Math.round(total), topCategories, period }
+      // 3. Build compact summary for LLM (lib/expenses.ts, shared with the benchmark)
+      const summary = summarizeExpenses(rows, period)
       console.log('[Fetch] summary:', JSON.stringify(summary))
 
       // 4. Generate advices — park if model not ready yet
@@ -420,24 +323,6 @@ export default function Advices() {
   // ─── Prompt & inference ────────────────────────────────────────────────────
 
 
-  const buildPrompt = (summary: any): string => {
-    const cats = summary.topCategories
-      .map((c: any) => `${c.category} €${c.total} (${c.pct}%)`)
-      .join(', ')
-
-    return (
-      `<start_of_turn>user\n` +
-      `Sei un consulente finanziario personale. Analizza le spese e genera 3 consigli pratici in italiano per le 
-      diverse categorie.\n` +
-      `Categorie: ${cats}\n` +
-      `Genera un unico file JSON per le categorie elencate.\n` +
-      `Esempio formato della risposta: {"category": "Electronics", "advices": [{"text": "Il 65% delle spese è destinato all'acquisto di elettronica, stabilisci un budget massimo per gli acquisti di elettronica."}, {"text": "Considera l'usato o il ricondizionamento per risparmiare.  Fai attenzione alle offerte e agli sconti"}, {"text": "Valuta se puoi dispositivi nuovi o ricondizionati per spendere meno"}]}, "category": "Car", "advices": [{"text": "Le spese per "Car" rappresentano il 13% delle tue spese.  È consigliabile monitorare l'utilizzo del veicolo e valutare se è necessario un nuovo modello o se puoi ottimizzare i consumi per ridurre i costi.  Considera l'acquisto di un'auto usata per risparmiare."}, {"text": "Considera l'usato o il ricondizionamento per risparmiare.  Fai attenzione alle offerte e agli sconti"}, {"text": "Valuta se puoi dispositivi nuovi o ricondizionati per spendere meno"}]}\n` +
-      `<end_of_turn>\n` +
-      `<start_of_turn>model\n`
-    )
-
-  }
-
   const generateWithLocalModel = async (summary: any) => {
     // Prevent concurrent inference calls
     if (isGeneratingRef.current) {
@@ -454,32 +339,11 @@ export default function Advices() {
     isGeneratingRef.current = true
     console.log('[Inference] starting generation…')
     setStatusText(t('advicesLabels.advicesGeneration'))
-    let fullResponse = ''
 
     try {
-      const prompt = buildPrompt(summary)
-      console.log('[Inference] prompt length:', prompt.length)
-
-      const llamaContext = await getLlamaContext()
-      const result = await llamaContext.completion(
-        {
-          prompt,
-          n_predict: 800,
-          temperature: 0.3,
-          top_p: 0.9,
-          repeat_penalty: 1.1,
-          stop: ['<end_of_turn>', '<start_of_turn>', '</s>'],
-        },
-        (data: { token: string }) => {
-          if (data.token) fullResponse += data.token
-        },
-      )
-
-      const rawText = (result?.text ?? fullResponse).trim()
-      console.log('[Inference] raw output:', rawText)
-
-      const parsed = tryParseAdvices(rawText)
-      console.log('[Inference] parsed advices:', parsed.length)
+      // Prompt, completion and parsing live in lib/advicesTurn.ts, shared with
+      // the benchmark screen.
+      const { advices: parsed } = await runAdvicesTurn({ summary })
 
       if (parsed.length) {
         setAdvices([...parsed, ...staticAdvices(t)])

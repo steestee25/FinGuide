@@ -1,0 +1,43 @@
+<bos><start_of_turn>user
+Sei un assistente di finanza personale. L'utente ha conoscenze base di finanza. Usa spiegazioni semplici e esempi pratici. Evita termini tecnici o complessi.
+
+REGOLE: Rispondi SOLO usando i documenti seguenti. Non inventare. Non dare consigli specifici di investimento. Rispondi in italiano in modo conciso.
+
+DOCUMENTO [le_obbligazioni#p000]:
+Chi acquista un'obbligazione versa del denaro a chi l'ha emessa (detto "emittente") che lo utilizza per finanziarsi e si impegna a restituirlo alla scadenza ed a pagare un interesse.
+
+- Emittente: L'emittente, che beneficia dell'operazione di finanziamento, è, tipicamente, uno Stato, una società privata, una banca ecc.. Dalla sua solidità economica dipende il pagamento degli interessi e la restituzione del capitale investito.
+- Scadenza: La scadenza individua il termine del prestito obbligazionario, il momento in cui l'emittente dovrà restituire le somme ricevute. Le obbligazioni possono essere a breve, medio e lungo termine.
+- Interesse: L'interesse, che viene normalmente corrisposto tramite cedole, è il prezzo che l'investitore pretende per prestare il proprio denaro. La sua funzione è duplice: compensare l'acquirente per la rinuncia a una certa somma di denaro e per il rischio a cui si espone, in quanto l'emittente potrebbe non restituire il denaro.
+- Rendimento: Il rendimento dell'obbligazione, oltre che dall'interesse, è composto anche dal guadagno in conto capitale (capital gain), che si ha se il titolo è acquistato a un prezzo minore di quello a cui è rimborsato o venduto. Se, al contrario, il titolo viene rimborsato o venduto ad un prezzo minore di quello di acquisto, si ha una perdita in conto capitale.
+
+DOCUMENTO [inflazione_e_rialzo_dei_tassi_di_interesse#p010]:
+Per esempio: Supponiamo che un'obbligazione a tre anni paghi 1.000 euro ogni anno. L'inflazione fa sì che, al terzo anno, 1.000 euro ti consentono di acquistare meno cose rispetto al primo e al secondo anno.
+- Strumenti finanziari a cedola variabile: Potresti avere strumenti finanziari a cedola variabile, come le obbligazioni a tasso variabile. In tal caso riceverai:
+- un pagamento periodico variabile fino alla data di scadenza dello strumento (cedola); e
+- il rimborso dell'investimento iniziale (valore nominale) alla scadenza. Il valore della cedola periodica è variabile, in funzione di vari fattori (ad esempio, può essere legato all'andamento dei tassi d'interesse, dell'inflazione, ecc.). L'inflazione ha un impatto sul rimborso ricevuto a scadenza, che sarà lo stesso durante i cicli inflazionistici, ma il potere d'acquisto di questo importo si riduce. La cedola periodica varia e può essere in grado di controbilanciare (in tutto o in parte) l'effetto dell'inflazione. Tuttavia, non è sempre detto che le variazioni del tasso cedolare riflettano il livello attuale dei tassi di interesse, né che compensino il tasso di inflazione.
+- Fondi comiuni di investimento: L'investimento in fondi comuni dà accesso a un portafoglio composto da diversi strumenti finanziari. L'impatto dell'inflazione e dell'aumento dei tassi d'interesse sui fondi d'investimento dipende dal tipo di fondo e dalla composizione del suo portafoglio d'investimento, ossia, ad esempio, dalle tipologie di strumenti o dal settore d'attività in cui il fondo investe.
+
+DOCUMENTO [i_derivati#p002]:
+In base al sottostante si individuano vari tipi di swap. I principali osservati sui mercati finanziari sono:
+- Interest rate swap: sono contratti in cui due controparti si scambiano pagamenti periodici di interessi, calcolati su una somma di denaro, detta capitale nozionale di riferimento (notional principal amount), per un periodo di tempo predefinito pari alla durata del contratto. La più diffusa forma di IRS è denominata plain vanilla swap e si caratterizza per il fatto che uno dei due flussi di pagamenti è basato su un tasso di interesse fisso, mentre l'altro è indicizzato a un tasso di interesse variabile. Le variazioni del tasso variabile, rispetto ai livelli ipotizzati al momento della conclusione del contratto, determinano il profilo di rischio/rendimento del prodotto. In particolare, se il tasso variabile risulta superiore alle aspettative, chi è obbligato a pagare il tasso fisso matura un profitto (in quanto, fermo restando i pagamenti a tasso fisso cui è obbligato, riceverà pagamenti a tasso variabile di importo superiore a quanto previsto). Il contrario se il tasso variabile scende. - Currency Swap: - letteralmente "scambio di valute" - sono contratti in cui due parti si scambiano il capitale e gli interessi espressi in una divisa contro capitale e interessi espressi in un'altra divisa. Caratteristica ricorrente dei currency swap è che entrambi i flussi di pagamenti sono a tasso variabile. - Asset Swap: sono contratti in cui due parti si scambiano pagamenti periodici liquidati in relazione ad un titolo obbligazionario (asset) detenuto da una di esse (e non, quindi, come per gli IRS, in relazione ad una semplice somma di denaro).Chi detiene l'obbligazione corrisponde l'interesse connesso all'obbligazione.
+
+DOCUMENTO [le_truffe_ai_tempi_del_covid#p005]:
+Anche se intuiamo che l'affare proposto potrebbe essere rischioso, riteniamo di poter contare sulle nostre conoscenze o sulla nostra furbizia e siamo convinti che sapremo uscirne al momento giusto! Una volta che l'investitore è caduto nella sua rete, il truffatore fa leva inoltre sulla propensione del truffato a negare anche l'evidenza: la vergogna di esserci 'cascati con tutte le scarpe' è tanta che si preferisce continuare a sperare e si rinuncia a denunciare!
+
+COME PROTEGGERSI DALLE TRUFFE Cosa devi sapere Le leggi base della finanza. Non esistono pasti gratis: un investimento che promette un alto rendimento è anche un investimento rischioso.
+
+DOCUMENTO [il_quadro_regolamentare_europeo#p003]:
+Nel 2008, nel pieno della crisi finanziaria, è stato poi istituito un nuovo gruppo di lavoro, composto da esperti e guidato da Jacques de Larosière, al fine di individuare alcune raccomandazioni per rafforzare la sorveglianza sul sistema finanziario europeo.
+
+In linea con le raccomandazioni del gruppo de Larosière del 25 febbraio 2009, la vigilanza europea ha quindi subito una trasformazione che, a sua volta, rappresenta un'evoluzione del precedente modello Lamfalussy.
+
+DOCUMENTO [inflazione_e_rialzo_dei_tassi_di_interesse#p008]:
+Chiedi alla tua banca o istituto di credito a quanto ammonterebbero le tue rate mensili se i tassi di interesse salissero (ad es. se il tasso di interesse passasse dal 2'%' al 3%). Potresti ancora permetterti di pagare le rate? 4) Presta particolare attenzione al rischio di sovraindebitamento In un periodo di alta inflazione, prima di contrarre un prestito considera quanto impatteranno le rate per ripagarlo sul tuo budget mensile/annuale, e se sarà necessario ridurre altre spese (ove possibile). Verifica la tua capacità di ripagare i debiti, non prendere in prestito più di quanto puoi permetterti, e contrai solo finanziamenti che sai di poter ripagare. Se ti rendi conto di avere problemi a ripagare dei finanziamenti, contatta al più presto la tua banca o istituto di credito per cercare possibili soluzioni. Agire in questo modo può aiutarti a evitare di pagare interessi di mora per pagamenti tardivi e di avere problemi a ottenere prestiti in futuro
+
+L'impatto dell'inflazione sugli strumenti finanziari Che cosa significa l'inflazione per me come investitore? Devi tenere conto dell'inflazione nella definizione della tua strategia di investimento. L'inflazione riduce i rendimenti reali degli investimenti finanziari ed erode il tuo potere d'acquisto.
+
+Ad esempio: Lo strumento finanziario X ha un rendimento nominale del 3'%' al lordo dell'inflazione. Se l'inflazione è del 5%, il rendimento reale è negativo (-2%) e il potere d'acquisto del capitale investito si riduce del 2%.
+
+Da cosa è composto il rendimento di un'obbligazione?<end_of_turn>
+<start_of_turn>model

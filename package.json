@@ -8,7 +8,10 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "benchmark:data": "node scripts/build-benchmark-data.js",
+    "benchmark:check": "node scripts/check-retrieval.js && node scripts/check-prompt.js",
+    "benchmark:apk": "node scripts/build-benchmark-apk.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

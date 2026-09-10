@@ -1,10 +1,11 @@
 // app/_layout.tsx
 import LoadingIndicator from '@/components/LoadingIndicator'
-import { Stack } from 'expo-router'
+import { Slot, Stack, usePathname } from 'expo-router'
 import { AppState, Platform, StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import CelebrationScreen from '../components/CelebrationScreen'
 import { AuthProvider, useAuth } from '../contexts/AuthContext'
+import { BENCHMARK_ENABLED } from '../lib/benchmark/flag'
 import { I18nProvider } from '../lib/i18n'
 import { supabase } from '../lib/supabase'
 import Auth from './auth'
@@ -21,6 +22,10 @@ AppState.addEventListener('change', (state) => {
 function RootLayoutContent() {
   // Get auth state values from context
   const { session, loading, isOnboarding, isCelebrating, endCelebration } = useAuth()
+  const pathname = usePathname()
+
+  // The benchmark runs offline and needs no account (benchmark builds only).
+  if (BENCHMARK_ENABLED && pathname.startsWith('/benchmark')) return <Slot />
 
   if (loading) return <LoadingIndicator />
   if (isCelebrating) return <CelebrationScreen onFinish={endCelebration} />

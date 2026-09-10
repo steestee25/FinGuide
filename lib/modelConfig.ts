@@ -5,7 +5,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import type { ModelFamily } from './chatPrompt';
 import { removeModel } from './modelStorage';
+import type { Lang } from './retrieval';
 
 let RNFS: any = null;
 if (Platform.OS !== 'web') {
@@ -19,9 +21,12 @@ export type LocalModel = {
   filename:  string;   // file name inside the repo
   cacheName: string;   // file name in DocumentDirectoryPath
   sizeBytes: number;   // expected size: progress + corruption check
+  lang:      Lang;     // fine-tuning language: prompt, corpus and stop-words
+  family:    ModelFamily;
 };
 
 export const LOCAL_MODELS: Record<string, LocalModel> = {
+  // Byte-identical (sha256) to Stee201/lira-gemma3-1b-ita-sipar-3reg Q8_0.
   'gemma3-1b-finance-it': {
     id:        'gemma3-1b-finance-it',
     label:     'Gemma 3 1B — Finance IT',
@@ -29,6 +34,8 @@ export const LOCAL_MODELS: Record<string, LocalModel> = {
     filename:  'gemma3-1b.q8_0.gguf',
     cacheName: 'gemma3-1b-finance-it.q8_0.gguf',
     sizeBytes: 1_069_306_144,
+    lang:      'it',
+    family:    'gemma3',
   },
 };
 

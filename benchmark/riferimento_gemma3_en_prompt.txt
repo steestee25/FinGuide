@@ -1,0 +1,85 @@
+<bos><start_of_turn>user
+You are a personal finance assistant. The user has basic financial knowledge. Use simple explanations and practical examples. Avoid technical or complex terms.
+
+RULES: Answer ONLY using the documents below. Do not make things up. Do not give specific investment advice. Answer in English, concisely.
+
+DOCUMENT [boe/explainers/can-you-stop-a-bank-from-going-bust#p001]:
+Things have changed. The Bank of England has a set of tools that allow it to step in quickly where needed.
+
+A failure today would play out in an orderly way with far less disruption to the rest of the system. And under the new set-up, the cost would fall on the shareholders and creditors of the failed bank (and potentially the banking sector), not on taxpayers.
+
+What did we learn from the financial crisis?: It was one of the worst ever seen.
+
+We learned two important lessons about how to deal with a failing bank:
+
+Who deals with bank failures?: At the time of the crisis, no single authority was formally responsible for dealing with failing banks.
+
+Who pays for bank failures?: During the crisis, public funds were used to bail out several banks and building societies in the UK.
+
+The bailouts came at a huge cost to taxpayers. They were necessary, though, to stop very serious disruption to the UK's banking system. If that had happened, people wouldn’t have been able to pay for things or have their wages paid in the normal way.
+
+What happens when a bank fails today?: Things are very different now.
+
+We have powers to step in if a bank fails. We also work with banks to create 'living wills' to show how we could deal with them if they suffered a catastrophic shock.
+
+DOCUMENT [boe/explainers/are-financial-crises-like-fires#p002]:
+The second solution when rebuilding London was to make the roads wider so that fires couldn’t spread so easily. They fixed the design of the City as whole.
+
+Likewise for fixing the financial system, as well as supervising individual institutions, the crisis showed the need to monitor the system as a whole.
+
+It’s the Bank of England’s job to look out for risks such as a wide spread build-up of debt that could destabilise the financial system.
+
+Today if a building caught fire, you would call the fire brigade who would try to put it out. In a financial crisis, the Bank of England could step in, for instance by offering emergency loans to banks in extreme financial distress.
+
+And even if a bank does collapse, the Bank of England now has the tools to make sure it does so in a safe and orderly way. You wouldn’t need to worry about losing any money up to £75,000 or your ability to make payments. In summary, the financial system is safer than before.
+
+The Bank of England inspects individual banks, monitors risks to the system as a whole and has the tools it needs to step in where needed.
+
+DOCUMENT [boe/explainers/will-there-be-another-financial-crisis#p004]:
+So the system is much safer today than it was in 2007-08.
+
+But no one can prevent crises from ever taking place again.
+
+It is the Bank of England’s role to monitor and assess the risks that are out there and to use the tools it has at its disposal to maintain a stable financial system.
+
+DOCUMENT [boe/explainers/what-is-capital#p001]:
+The next step is to make the bank set aside a percentage of these assets as capital to pay for potential losses.
+
+A bank can increase its capital by:
+* holding back some of the money it makes during good times rather than paying it out to investors as or to staff as bonuses
+* selling some new shares to make money
+
+money paid regularly by a company to its investors from its profit
+
+Stress testing also supports the banking sector: Rules are not enough to guarantee a safe and sound banking sector. So, we carry out stress tests to see if banks are strong enough to cope with extreme economic situations.
+
+It is crucial banks are strong and keep lending money if the economy goes into a downturn to prevent any damage spreading.
+
+Bank of England's explainer on stress-testing.
+
+* ###
+
+Hi, my name is Noor and I work at the Bank of England. Here at the Bank of England, we need to keep an eye on how banks would cope with difficult economic situations. We do this by stress testing banks, against various hypothetical scenarios. The Bank of England then ensures that should these situations occur, banks hold sufficient capital to meet unexpected losses.
+
+DOCUMENT [boe/explainers/what-is-capital#p002]:
+From 2016, we will use two 'what if' scenarios to test banks. The first will be a yearly test of shock scenarios of different levels of severity, based on the UK's current economic cycle. The annual cyclical scenario could include falls in output or house prices or increases in interest rates or unemployment. The second will be an exploratory scenario every two years. This scenario will look at risks that are unlikely to happen but are still a concern, for example what might happen if a large bank fails. Banks have always been required to hold a minimum amount of capital to absorb losses but from 2016 how the Bank of England looks at stress-test performance is changing. With larger and more risky banks needing to carry more loss-absorbing capital.
+
+Should a bank not perform satisfactorily, the Bank of England has a range of powers, such as requiring the bank to take action to strengthen its capital position within a certain period of time.
+
+Does this mean banks can’t go bust?: Like any other company, a bank may go bust if it runs into financial trouble or is not sustainable as a business anymore. If this happens, its investors should foot the bill and not taxpayers. So, in the UK, if your bank fails, you can claim back up to £120,000 of your money through the Financial Services Compensation Scheme.
+
+The deposit protection limit rose from £85,000 to £120,000 on 1 December 2025.
+
+DOCUMENT [boe/explainers/will-there-be-another-financial-crisis#p003]:
+Should a bank not perform satisfactorily, the Bank of England has a range of powers, such as requiring the bank to take action to strengthen its capital position within a certain period of time.
+
+There have been other important changes, too.
+
+In the event that a large commercial bank did go bust today, the Bank of England now has the powers to deal with the situation in an orderly way. Crucially, there would no longer be a need for the UK government to bail-out a failing bank at the expense of taxpayers. We also require banks to prepare for their own failure so we can use our powers as quickly and effectively as possible.
+
+What does the future have in store?: The vote to leave the European Union in June 2016 led to a lot of uncertainty surrounding the future of the UK’s trading arrangements. The Bank of England cut interest rates and announced other measures to increase the amount of spending in the UK economy, which in turn will boost employment and wages.
+
+The leave vote jolted financial markets but we have made sure that banks now have substantial financial resources to help them weather this and any future storm.
+
+What tools does the Bank of England now have to step in when a bank fails?<end_of_turn>
+<start_of_turn>model

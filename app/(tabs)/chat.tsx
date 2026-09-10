@@ -30,7 +30,8 @@ import {
 } from '@/lib/modelStorage';
 import { getLlamaContext } from '@/lib/llamaContext';
 import { loadProficiencyLevelWithFallback } from '@/lib/questionnaireStorage';
-import { retrieveRelevant } from '@/lib/retrieval';
+import { normalizeLevel } from '@/lib/chatPrompt';
+import { CHAT_GENERATION, runChatTurn } from '@/lib/chatTurn';
 import { appStyles } from '../../styles/components/chatStyles';
 import { PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout';
 
@@ -353,18 +354,6 @@ export default function Chat(): React.JSX.Element {
     await downloadAndLoadModel();
   };
 
-  // Helper: Get proficiency instruction
-  const getProficiencyInstruction = (): string => {
-    switch (proficiencyLevel) {
-      case 'base':
-        return 'L\'utente ha conoscenze base di finanza. Usa spiegazioni semplici e esempi pratici. Evita termini tecnici o complessi.';
-      case 'advanced':
-        return 'L\'utente ha conoscenze avanzate di finanza personale. Evita spiegazioni eccessivamente basilari, puoi usare termini tecnici e spiegazioni più approfondite.';
-      default:
-        return 'L\'utente ha conoscenze di finanza intermedie. Puoi introdurre alcuni termini tecnici, ma sempre accompagnati da una spiegazione.';
-    }
-  };
-
   const handleSendMessage = async (message?: string) => {
     if (isSendingRef.current) {
       return;
@@ -405,100 +394,30 @@ export default function Chat(): React.JSX.Element {
     setStreamingText('');
 
     try {
-      let retrievedDocsData: { id: string; text: string; metadata?: { source_title?: string; source_url?: string; answer?: string } }[] = [];
-
-      if (ragEnabled) {
-        setRagPhase('fetching');
-        setRetrievedDocs([]);
-        setCurrentSources([]);
-
-        try {
-          retrievedDocsData = await retrieveRelevant(messageToSend, { k: 6, minScore: 0.05 });
-          setRetrievedDocs(retrievedDocsData);
-          setCurrentSources(retrievedDocsData);
-        } catch (error) {
-          console.warn('Retrieval failed:', error);
-        }
-
-        setRagPhase('reasoning');
-      } else {
-        setRagPhase('reasoning');
-      }
-
-      const messagesForModel: Message[] = [];
-      let systemMessage = 'You are a helpful assistant.';
-
-      if (newConversation[0]) {
-        systemMessage = `${newConversation[0].content}\n\n`;
-      }
-
-      const maxDocs = 6;
-      const trimmedDocs = retrievedDocsData.slice(0, maxDocs);
-      if (ragEnabled && trimmedDocs.length) {
-        // Byte-for-byte the format the LoRA was trained on (_build_rag_messages,
-        // prova_server/main.py:170): the level instruction sits on the role line,
-        // RULES next, then one "DOCUMENTO [id]:" block per document joined by blank
-        // lines, and nothing after the last one. No indentation anywhere.
-        const safeRetrievedText = trimmedDocs
-          .map(doc => `DOCUMENTO [${doc.id}]:\n${doc.text}`)
-          .join('\n\n');
-
-        systemMessage =
-          `Sei un assistente di finanza personale. ${getProficiencyInstruction()}\n\n` +
-          'REGOLE: Rispondi SOLO usando i documenti seguenti. Non inventare. ' +
-          'Non dare consigli specifici di investimento. Rispondi in italiano in modo conciso.\n\n' +
-          safeRetrievedText;
-      }
-
-      messagesForModel.push({ role: 'system', content: systemMessage });
-      const recentConversation = newConversation.slice(1);
-      const recentTrimmed = recentConversation.slice(-6);
-
-      if (recentTrimmed.length > 0 && recentTrimmed[0].role === 'assistant') {
-        recentTrimmed.shift();
-      }
-
-      messagesForModel.push(...recentTrimmed);
-
-      console.log('===== FULL PROMPT SENT TO MODEL =====');
-      console.log('Proficiency Level:', proficiencyLevel);
-      console.log('System Message:', systemMessage);
-      console.log('Full Messages Array:', JSON.stringify(messagesForModel, null, 2));
-      console.log('===== END PROMPT =====');
-
-      setRagPhase('generating');
-      const stopWords = [
-        '</s>',
-        '<|end|>',
-        '<|im_end|>',
-        '<|eot_id|>',
-      ];
-
-      let fullResponse = '';
-      const llamaContext = await getLlamaContext();
-      const result = await llamaContext.completion(
-        {
-          messages: messagesForModel,
-          // Leaves ~3.3k of the 4096-token window for the prompt, enough for six
-          // documents even at the corpus p90.
-          n_predict: 768,
-          stop: stopWords,
-          temperature: 0.3,
-          top_p: 0.95,
-          repeat_penalty: 1.2,
-          repeat_last_n: 128,
-          
-        },
-        (data: { token: string }) => {
-          const { token } = data;
-          if (token) {
-            fullResponse += token;
-            setStreamingText(fullResponse);
-            console.log('Streaming token:', token);
+      // Retrieval, the training-format prompt and the streamed completion live in
+      // lib/chatTurn.ts, shared with the benchmark screen.
+      const { docs: retrievedDocsData, completion: result } = await runChatTurn({
+        question: messageToSend,
+        history: conversation.slice(1),
+        level: normalizeLevel(proficiencyLevel),
+        lang: MODEL.lang,
+        family: MODEL.family,
+        ragEnabled,
+        fallbackSystem: newConversation[0] ? `${newConversation[0].content}\n\n` : 'You are a helpful assistant.',
+        generation: CHAT_GENERATION,
+        onPhase: phase => {
+          setRagPhase(phase);
+          if (phase === 'fetching') {
+            setRetrievedDocs([]);
+            setCurrentSources([]);
           }
         },
-      );
-      console.log('Full generated response:', fullResponse);
+        onDocs: docs => {
+          setRetrievedDocs(docs);
+          setCurrentSources(docs);
+        },
+        onText: setStreamingText,
+      });
 
       if (result && result.text) {
         const finalResponse = result.text.trim();

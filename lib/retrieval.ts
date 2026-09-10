@@ -1,13 +1,22 @@
 // Retrieves relevant documents from the knowledge base using BM25.
+//
+// One corpus per language, the same ones the models were fine-tuned on:
+// 522 CONSOB paragraphs (it) and 455 FCA / Bank of England paragraphs (en).
+// Regenerate lib/corpus/ with scripts/build-benchmark-data.js.
 
 import * as bm25 from './bm25Index';
-import PASSAGES from './passages.json';
+import PASSAGES_EN from './corpus/passages_en.json';
+import PASSAGES_IT from './corpus/passages_it.json';
+import STOPWORDS_EN from './corpus/stopwords_en.json';
+import STOPWORDS_IT from './corpus/stopwords_it.json';
 
-/** A CONSOB paragraph, as exported by the server corpus (passages.jsonl). */
+export type Lang = 'it' | 'en';
+
+/** A paragraph as exported by the server corpus (passages_*.jsonl). */
 type Passage = {
   passage_id: string;
-  text:       string;
   concept:    string;
+  text:       string;
   source_url: string;
 };
 
@@ -25,151 +34,148 @@ export type Doc = {
   };
 };
 
-type DiskCache = {
-  version:    number;
-  fingerprint: string;
-  docs:       Doc[];
-  bm25Index:  bm25.BM25Index;
+type Corpus = {
+  passages:    Passage[];
+  stopWords:   ReadonlySet<string>;
+  sourceTitle: (passageId: string) => string;
 };
+
+const CORPORA: Record<Lang, Corpus> = {
+  it: {
+    passages:    PASSAGES_IT as Passage[],
+    stopWords:   new Set(STOPWORDS_IT as string[]),
+    // getDisplaySourceTitle() already appends the topic derived from the URL.
+    sourceTitle: () => 'CONSOB',
+  },
+  en: {
+    passages:    PASSAGES_EN as Passage[],
+    stopWords:   new Set(STOPWORDS_EN as string[]),
+    sourceTitle: id => (id.startsWith('boe/') ? 'Bank of England' : 'FCA'),
+  },
+};
+
+type DiskCache = {
+  version:     number;
+  fingerprint: string;
+  bm25Index:   bm25.BM25Index;
+};
+
+type Indexed = { docs: Doc[]; index: bm25.BM25Index; stopWords: ReadonlySet<string> };
 
 
 // 2: corpus switched from ft.jsonl Q&A chunks to the 522 CONSOB paragraphs.
-const CACHE_VERSION   = 2;
-const CACHE_FILE      = RNFS
-  ? `${RNFS.DocumentDirectoryPath}/bm25_index.json`
-  : null;
+// 3: training-pipeline BM25 (Unicode tokeniser, stop-word files, concept + text).
+const CACHE_VERSION   = 3;
+const cacheFile       = (lang: Lang) =>
+  RNFS ? `${RNFS.DocumentDirectoryPath}/bm25_index_${lang}.json` : null;
+const LEGACY_CACHE    = RNFS ? `${RNFS.DocumentDirectoryPath}/bm25_index.json` : null;
 
 
-let indexedDocs: Doc[] | null = null;
+const indexed: Partial<Record<Lang, Indexed>> = {};
 
 
 /**
- * Indexes the 522 CONSOB paragraphs.
- *
- * The previous corpus was the question/answer pairs of ft.jsonl — the very set
- * the model was fine-tuned on — so the exact answer to a question ended up in
- * the prompt and the model copied it verbatim instead of reasoning over the
- * sources. Paragraphs carry no answer to copy.
- *
  * `metadata.answer` is deliberately left unset: SourcesDisplay falls back to
  * `item.text` (components/SourcesDisplay.tsx:98), which is the paragraph itself.
- * `source_title` stays 'CONSOB' because getDisplaySourceTitle() already appends
- * the topic derived from the URL.
  */
-function loadDocs(): Doc[] {
-  return (PASSAGES as Passage[]).map(p => ({
+function loadDocs(corpus: Corpus): Doc[] {
+  return corpus.passages.map(p => ({
     id:   p.passage_id,
     text: p.text,
     metadata: {
-      source_title: 'CONSOB',
+      source_title: corpus.sourceTitle(p.passage_id),
       source_url:   p.source_url,
     },
   }));
 }
 
+/** The title only helps retrieval: it is indexed, but never put in the prompt. */
+const indexText = (p: Passage) => `${p.concept} ${p.text}`;
+
 // Changes whenever knowledge base content changes → cache invalidation.
 
-function fingerprint(docs: Doc[]): string {
+function fingerprint(texts: string[], stopWords: ReadonlySet<string>): string {
   let h = 0;
-  for (const d of docs) {
-    const s = `${d.id}:${d.text}`;
+  for (const s of [...texts, ...stopWords]) {
     for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
   }
   return h.toString(36);
 }
 
 /**
- * Ensures the BM25 index is ready.
+ * Ensures the BM25 index for `lang` is ready.
  *
  * Load order:
  *   1. Already in memory this session → return immediately.
  *   2. On-disk cache valid (version + fingerprint match) → restore index, no rebuild.
  *   3. Build from scratch + write cache to disk.
  */
-export async function ensureIndexed(): Promise<Doc[]> {
-  if (indexedDocs && bm25.isReady()) return indexedDocs;
+export async function ensureIndexed(lang: Lang = 'it'): Promise<Indexed> {
+  const ready = indexed[lang];
+  if (ready && bm25.isReady(ready.index)) return ready;
 
-  const docs = loadDocs();
-  const fp   = fingerprint(docs);
+  const corpus = CORPORA[lang];
+  const docs   = loadDocs(corpus);
+  const texts  = corpus.passages.map(indexText);
+  const fp     = fingerprint(texts, corpus.stopWords);
+  const file   = cacheFile(lang);
 
-  if (RNFS && CACHE_FILE) {
+  if (RNFS && LEGACY_CACHE) {
+    await RNFS.unlink(LEGACY_CACHE).catch(() => {});
+  }
+
+  if (RNFS && file) {
     try {
-      const exists = await RNFS.exists(CACHE_FILE);
-      if (exists) {
-        const raw: DiskCache = JSON.parse(await RNFS.readFile(CACHE_FILE, 'utf8'));
+      if (await RNFS.exists(file)) {
+        const raw: DiskCache = JSON.parse(await RNFS.readFile(file, 'utf8'));
 
-        if (raw.version === CACHE_VERSION && raw.fingerprint === fp) {
-          bm25.loadIndex(raw.bm25Index);
-          indexedDocs = raw.docs;
-          console.log(`[BM25] Index loaded from cache (${indexedDocs.length} docs)`);
-          return indexedDocs;
+        if (raw.version === CACHE_VERSION && raw.fingerprint === fp && bm25.isReady(raw.bm25Index)) {
+          console.log(`[BM25:${lang}] Index loaded from cache (${docs.length} docs)`);
+          return (indexed[lang] = { docs, index: raw.bm25Index, stopWords: corpus.stopWords });
         }
 
-        console.log('[BM25] Cache stale, rebuilding');
-        await RNFS.unlink(CACHE_FILE).catch(() => {});
+        console.log(`[BM25:${lang}] Cache stale, rebuilding`);
+        await RNFS.unlink(file).catch(() => {});
       }
     } catch (e) {
-      console.warn('[BM25] Cache read failed, rebuilding:', e);
+      console.warn(`[BM25:${lang}] Cache read failed, rebuilding:`, e);
     }
   }
 
-  bm25.buildIndex(docs.map(d => d.text));
-  console.log(`[BM25] Index built for ${docs.length} documents`);
+  const index = bm25.buildIndex(texts, corpus.stopWords);
+  console.log(`[BM25:${lang}] Index built for ${docs.length} documents`);
 
-  if (RNFS && CACHE_FILE) {
+  if (RNFS && file) {
     try {
-      const cache: DiskCache = {
-        version:    CACHE_VERSION,
-        fingerprint: fp,
-        docs,
-        bm25Index:  bm25.getIndex(),
-      };
-      await RNFS.writeFile(CACHE_FILE, JSON.stringify(cache), 'utf8');
-      console.log('[BM25] Cache written to disk');
+      const cache: DiskCache = { version: CACHE_VERSION, fingerprint: fp, bm25Index: index };
+      await RNFS.writeFile(file, JSON.stringify(cache), 'utf8');
+      console.log(`[BM25:${lang}] Cache written to disk`);
     } catch (e) {
-      console.warn('[BM25] Failed to write cache:', e);
+      console.warn(`[BM25:${lang}] Failed to write cache:`, e);
     }
   }
 
-  indexedDocs = docs;
-  return docs;
+  return (indexed[lang] = { docs, index, stopWords: corpus.stopWords });
 }
 
+/** The k best paragraphs for `query`, best first (see bm25.topK for the order). */
 export async function retrieveRelevant(
   query:   string,
-  options: { k?: number; minScore?: number } = {},
+  options: { k?: number; lang?: Lang } = {},
 ): Promise<Doc[]> {
-  const { k = 6, minScore = 0.0 } = options;
+  const { k = 6, lang = 'it' } = options;
 
-  const docs = await ensureIndexed();
-  if (!docs.length) return [];
+  const { docs, index, stopWords } = await ensureIndexed(lang);
 
-  const queryTerms = bm25.tokenize(query);
-  if (!queryTerms.length) return [];
+  const queryTerms = bm25.tokenize(query, stopWords);
+  const best = bm25.topK(bm25.scoreAll(index, queryTerms), k);
 
-  const scoreMap = bm25.scoreAll(queryTerms);
-  if (!scoreMap.size) return [];
-
-  const ranked = Array.from(scoreMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, k);
-
-  const filtered = minScore > 0
-    ? ranked.filter(([, s]) => s >= minScore)
-    : ranked;
-
-  const final = filtered.length >= 3 ? filtered : ranked.slice(0, Math.min(3, ranked.length));
-
-  console.log(`[BM25] query="${query}" terms=[${queryTerms.join(', ')}]`);
-  final.forEach(([docIdx, s], i) =>
-    console.log(`  [${i+1}] score=${s.toFixed(3)} id=${docs[docIdx].id} "${docs[docIdx].text.slice(0,60).replace(/\n/g,' ')}…"`)
+  console.log(`[BM25:${lang}] query="${query}" terms=[${queryTerms.join(', ')}]`);
+  best.forEach(({ docIdx, score }, i) =>
+    console.log(`  [${i+1}] score=${score.toFixed(3)} id=${docs[docIdx].id} "${docs[docIdx].text.slice(0,60).replace(/\n/g,' ')}…"`)
   );
 
-  return final.map(([docIdx]) => ({
-    id:       docs[docIdx].id,
-    text:     docs[docIdx].text,
-    metadata: docs[docIdx].metadata,
-  }));
+  return best.map(({ docIdx }) => docs[docIdx]);
 }
 
 export default { ensureIndexed, retrieveRelevant };

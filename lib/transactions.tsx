@@ -1,4 +1,5 @@
 import locales from '../locales/locales.json';
+import { aggregateExpensesByCategory } from './expenses';
 import { supabase } from './supabase';
 
 type LocaleKey = 'en' | 'it';
@@ -350,15 +351,7 @@ export const fetchExpensesByCategoryLastMonth = async (userId: string) => {
       return [];
     }
 
-    const totals: Record<string, number> = {};
-    (data || []).forEach((tx: any) => {
-      const cat = tx.category || 'Other';
-      totals[cat] = (totals[cat] || 0) + Math.abs(tx.amount);
-    });
-
-    return Object.entries(totals)
-      .map(([category, total]) => ({ category, total: Math.round(total) }))
-      .sort((a, b) => b.total - a.total);
+    return aggregateExpensesByCategory(data || []);
   } catch (err) {
     console.error('Errore inaspettato nel fetch spese per categoria:', err);
     return [];
@@ -390,15 +383,7 @@ export const fetchExpensesByCategoryLast3Months = async (userId: string) => {
       return [];
     }
 
-    const totals: Record<string, number> = {};
-    (data || []).forEach((tx: any) => {
-      const cat = tx.category || 'Other';
-      totals[cat] = (totals[cat] || 0) + Math.abs(tx.amount);
-    });
-
-    return Object.entries(totals)
-      .map(([category, total]) => ({ category, total: Math.round(total) }))
-      .sort((a, b) => b.total - a.total);
+    return aggregateExpensesByCategory(data || []);
   } catch (err) {
     console.error('Errore inaspettato nel fetch spese per categoria ultimi 3 mesi:', err);
     return [];
@@ -430,15 +415,7 @@ export const fetchExpensesByCategoryLastYear = async (userId: string) => {
       return [];
     }
 
-    const totals: Record<string, number> = {};
-    (data || []).forEach((tx: any) => {
-      const cat = tx.category || 'Other';
-      totals[cat] = (totals[cat] || 0) + Math.abs(tx.amount);
-    });
-
-    return Object.entries(totals)
-      .map(([category, total]) => ({ category, total: Math.round(total) }))
-      .sort((a, b) => b.total - a.total);
+    return aggregateExpensesByCategory(data || []);
   } catch (err) {
     console.error('Errore inaspettato nel fetch spese per categoria ultimo anno:', err);
     return [];

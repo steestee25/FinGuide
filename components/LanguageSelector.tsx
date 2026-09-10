@@ -17,7 +17,7 @@ type Props = {
 
 const LANGUAGE_OPTIONS: LanguageOption[] = [
   { key: 'it', label: 'Italiano', flag: '🇮🇹', image: require('../assets/images/italia.png') },
-  { key: 'en', label: 'English', flag: '🇬🇧', image: require('../assets/images/uk.png') },
+  { key: 'en', label: 'English', flag: '🇬🇧', image: require('../assets/images/uk.jpg') },
 ];
 
 export default function LanguageSelector({ onSelect, selectedKey = 'it' }: Props) {
