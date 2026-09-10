@@ -1,5 +1,6 @@
 // app/_layout.tsx
 import LoadingIndicator from '@/components/LoadingIndicator'
+import * as Linking from 'expo-linking'
 import { Slot, Stack, usePathname } from 'expo-router'
 import { AppState, Platform, StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -23,9 +24,12 @@ function RootLayoutContent() {
   // Get auth state values from context
   const { session, loading, isOnboarding, isCelebrating, endCelebration } = useAuth()
   const pathname = usePathname()
+  const url = Linking.useURL()
 
   // The benchmark runs offline and needs no account (benchmark builds only).
-  if (BENCHMARK_ENABLED && pathname.startsWith('/benchmark')) return <Slot />
+  // The deep link is checked as well: offline with an expired token the auth
+  // load never ends, no navigator mounts, and the pathname stays '/'.
+  if (BENCHMARK_ENABLED && (pathname.startsWith('/benchmark') || url?.includes('://benchmark'))) return <Slot />
 
   if (loading) return <LoadingIndicator />
   if (isCelebrating) return <CelebrationScreen onFinish={endCelebration} />

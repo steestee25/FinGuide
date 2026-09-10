@@ -71,7 +71,9 @@ export const PAPER_GENERATION: GenerationParams = {
  * full    = 3 warm-up + 30 questions × 3 levels (ISTRUZIONI §3)
  * repeat  = 3 warm-up + 5 questions × intermediate × 5 repetitions
  * advices = spending advice on fixed transactions × 10 (§5)
- * prova   = 1 warm-up + 2 runs, written apart: a check of the setup, not data
+ * prova   = 1 warm-up + 2 runs, written apart: a check of the setup, not data.
+ *           With `items` ("26a,27b,27i": question n + b/i/a) it replays exactly
+ *           those runs, to reproduce a problem seen in a session.
  */
 export type SessionMode = 'full' | 'repeat' | 'advices' | 'prova';
 
@@ -198,6 +200,27 @@ const stopGeneration = async () => {
 };
 
 const looksLikeOom = (e: unknown) => /memory|alloc|oom|mmap|mlock/i.test(String(e));
+
+/**
+ * llama.rn ends a turn without EOS, a stop word or the length limit only when a
+ * decode fails, and it reports no error: the answer is cut short.
+ */
+const generationAborted = (completion: any) =>
+  !!completion &&
+  !completion.stopped_eos &&
+  !completion.stopped_word &&
+  !completion.stopped_limit &&
+  !completion.interrupted;
+
+/** The completion's own stop flags, recorded as they come. */
+const stopFlags = (completion: any) => ({
+  stopped_eos:   completion?.stopped_eos ?? null,
+  stopped_word:  completion?.stopped_word ?? null,
+  stopped_limit: completion?.stopped_limit ?? null,
+  interrupted:   completion?.interrupted ?? null,
+  context_full:  completion?.context_full ?? null,
+  truncated:     completion?.truncated ?? null,
+});
 
 function deviceRecord(d: DeviceInfo) {
   return {
@@ -474,13 +497,26 @@ let sessionRunning = false;
 
 type PlanItem = { q: Question; level: ProficiencyLevel; warmup: boolean; repeat: number | null };
 
+const LEVEL_CODES: Record<string, ProficiencyLevel> = { b: 'base', i: 'intermediate', a: 'advanced' };
+
+/** "26a,27b" → question 26 advanced, question 27 base. */
+function parseItems(items: string, questions: Question[]): PlanItem[] {
+  return items.split(',').map(code => {
+    const m = code.trim().match(/^(\d+)([bia])$/);
+    const q = m ? questions.find(x => x.n === Number(m[1])) : undefined;
+    if (!m || !q) throw new Error(`invalid item "${code}" (expected e.g. 26a)`);
+    return { q, level: LEVEL_CODES[m[2]], warmup: false, repeat: null };
+  });
+}
+
 /** Warm-up (first questions, intermediate), then the fixed order of §3. */
-function plan(mode: 'full' | 'repeat' | 'prova', lang: Lang): PlanItem[] {
+function plan(mode: 'full' | 'repeat' | 'prova', lang: Lang, items?: string): PlanItem[] {
   const questions = QUESTIONS[lang];
   const warmup = (count: number): PlanItem[] => questions.slice(0, count)
     .map(q => ({ q, level: 'intermediate', warmup: true, repeat: null }));
 
   if (mode === 'prova') {
+    if (items) return parseItems(items, questions);
     return [
       ...warmup(1),
       { q: questions[0], level: 'base', warmup: false, repeat: null },
@@ -511,6 +547,8 @@ export type SessionOptions = {
   conditionsOverridden: boolean;
   /** Measure even if a section 0 check fails (the session row says so). */
   ignoreFailedChecks?:  boolean;
+  /** 'prova' only: the runs to replay, e.g. "26a,27b,27i". */
+  items?:               string;
 };
 
 export async function runSession(o: SessionOptions): Promise<void> {
@@ -531,10 +569,13 @@ export async function runSession(o: SessionOptions): Promise<void> {
     const sessionId = `${deviceSlug}_${model.id}_${mode}_${started.toISOString().replace(/[-:]/g, '').slice(0, 15)}`;
     const stat = await RNFS.stat(modelPath(model)).catch(() => null);
     const generation = mode === 'advices' ? ADVICES_GENERATION : PAPER_GENERATION;
+    // Parse before loading: a typo in `items` should not cost a model load.
+    const items = mode === 'advices' ? [] : plan(mode, model.lang, o.items);
 
     const sessionRow: Record<string, any> = {
       session_id:             sessionId,
       mode,
+      items:                  o.items ?? null,
       device:                 deviceRecord(device),
       device_full:            device,
       app:                    appRecord(),
@@ -618,7 +659,7 @@ export async function runSession(o: SessionOptions): Promise<void> {
     const context = { ui, model, sessionRow, rowBase, network, deviceSlug, counts, say };
 
     if (mode === 'advices') await runAdvices(context);
-    else await runChat(context, plan(mode, model.lang));
+    else await runChat(context, items);
 
     const end = await probe.conditions();
     const deviceEnd = await probe.deviceInfo();
@@ -719,7 +760,7 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
     };
     c.say(`${order}/${items.length} n=${item.q.n} ${item.level}${item.warmup ? ' (riscaldamento)' : ''}`);
 
-    const { value: out, error, errorMessage, probes } = await probed(c, row, () =>
+    const { value: out, error: probeError, errorMessage, probes } = await probed(c, row, () =>
       c.ui.turn({ question: item.q.question, level: item.level, model: c.model, generation: PAPER_GENERATION }),
     );
 
@@ -729,6 +770,7 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
     const promptTokens: number | null = completion?.tokens_evaluated ?? null;
     const outputTokens: number | null = completion?.tokens_predicted ?? timings?.predicted_n ?? null;
     const ids = (out?.docs ?? []).map(d => d.id);
+    const error = probeError ?? (generationAborted(completion) ? 'generation_aborted' : null);
 
     const result = {
       ...row,
@@ -747,12 +789,14 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
       runtime_timings:         timings,
       // Prompt tokens whose KV entries were reused from the previous run (the
       // shared prompt prefix); the runtime evaluated only the rest (prompt_n).
+      // Meaningless when the generation aborted (the runtime's counters stop).
       prompt_reused_tokens:    promptTokens != null && timings?.prompt_n != null ? promptTokens - timings.prompt_n : null,
       // llama.rn's `tokens_cached`: positions in the KV cache after generation.
       n_past_after:            completion?.tokens_cached ?? null,
-      stopped_eos:             completion?.stopped_eos ?? null,
-      stopped_word:            completion?.stopped_word ?? null,
-      truncated_by_max_tokens: outputTokens != null && outputTokens >= PAPER_GENERATION.n_predict,
+      ...stopFlags(completion),
+      // The runtime counts the last sampled token in predicted_n; the text holds
+      // one token less (tokens_predicted), so the limit shows up as predicted_n.
+      truncated_by_max_tokens: !!completion?.stopped_limit || (timings?.predicted_n ?? 0) >= PAPER_GENERATION.n_predict,
       ...probes,
       prompt_tokens_lt_n_ctx:  promptTokens != null && promptTokens < N_CTX && !completion?.truncated,
       level_ok:                !!out && out.systemMessage.startsWith(expectedHead(lang, item.level)),
@@ -768,7 +812,7 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
 
     c.say(
       error
-        ? `  errore ${error}: ${errorMessage}`
+        ? `  errore ${error}: ${errorMessage ?? `n_past ${result.n_past_after}, ${outputTokens} tok`}`
         : `  prompt ${promptTokens} tok, ttft_ui ${result.ttft_ui_ms} ms, ${outputTokens} tok in ${result.decode_ms} ms, e2e ${result.e2e_ms} ms, picco ${probes.peak_mem_mb} MB`,
     );
 
@@ -804,7 +848,7 @@ async function runAdvices(c: RunContext): Promise<void> {
 
     const marks: AdvicesMarks = {};
     let tStart = 0;
-    const { value: out, error, errorMessage, probes } = await probed(c, row, async () => {
+    const { value: out, error: probeError, errorMessage, probes } = await probed(c, row, async () => {
       tStart = now();
       const result = await runAdvicesTurn({ summary, marks });
       const visible = await c.ui.showAdvices(result.advices);
@@ -813,6 +857,7 @@ async function runAdvices(c: RunContext): Promise<void> {
 
     const completion = out?.completion;
     const timings = completion?.timings ?? null;
+    const error = probeError ?? (generationAborted(completion) ? 'generation_aborted' : null);
     await appendRow(files().runs, {
       ...row,
       prompt_tokens:   completion?.tokens_evaluated ?? null,
@@ -822,8 +867,9 @@ async function runAdvices(c: RunContext): Promise<void> {
       output_tokens:   completion?.tokens_predicted ?? timings?.predicted_n ?? null,
       e2e_ms:          span(tStart || null, out?.visible ?? null),
       runtime_timings: timings,
+      ...stopFlags(completion),
       truncated_by_max_tokens:
-        (completion?.tokens_predicted ?? 0) >= ADVICES_GENERATION.n_predict,
+        !!completion?.stopped_limit || (timings?.predicted_n ?? 0) >= ADVICES_GENERATION.n_predict,
       ...probes,
       parsed_advices:  out?.advices.length ?? 0,
       // With no parsable advice the tab shows rule-based fallback text instead.

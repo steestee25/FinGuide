@@ -253,6 +253,7 @@ function BenchmarkScreen() {
       conditions,
       conditionsOverridden: overridden,
       ignoreFailedChecks: params.ignoreChecks === '1',
+      items: typeof (params as any).items === 'string' ? (params as any).items : undefined,
     });
   });
 

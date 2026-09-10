@@ -118,6 +118,12 @@ export async function runChatTurn(o: ChatTurnOptions): Promise<ChatTurnResult> {
 
   let fullResponse = '';
   const llamaContext = await getLlamaContext();
+  // Every turn starts from an empty KV cache. llama.rn reuses the previous
+  // prompt's common prefix, and with Gemma3's sliding-window cache that leaks
+  // cells: after ~75 turns decode fails ("failed to find a memory slot") and
+  // answers come back cut short or empty. The shared prefix is ~20 tokens, so
+  // evaluating it again costs next to nothing.
+  await llamaContext.clearCache(false);
   mark('completion_start');
   const completion = await llamaContext.completion(
     { messages, ...o.generation },

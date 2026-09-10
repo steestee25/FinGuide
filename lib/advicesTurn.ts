@@ -152,6 +152,9 @@ export async function runAdvicesTurn(o: {
 
   let fullResponse = ''
   const llamaContext = await getLlamaContext()
+  // Empty KV cache per turn: prefix reuse leaks sliding-window cache cells
+  // until decode fails (see lib/chatTurn.ts).
+  await llamaContext.clearCache(false)
   mark('completion_start')
   const completion = await llamaContext.completion(
     { prompt, ...ADVICES_GENERATION },
