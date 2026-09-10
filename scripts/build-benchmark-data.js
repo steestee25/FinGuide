@@ -60,8 +60,9 @@ const git = (args) => {
 };
 write('lib/benchmark/data/build-info.json', {
   commit: git('rev-parse --short HEAD'),
-  // Uncommitted changes other than this file itself.
-  dirty: !!git('status --porcelain -- . ":!lib/benchmark/data/build-info.json"'),
+  // Uncommitted changes to tracked files other than this file itself
+  // (untracked scratch files do not end up in the APK).
+  dirty: !!git('status --porcelain --untracked-files=no -- . ":!lib/benchmark/data/build-info.json"'),
   generatedAt: new Date().toISOString(),
   llamaRnVersion: require(path.join(ROOT, 'node_modules', 'llama.rn', 'package.json')).version,
 });
