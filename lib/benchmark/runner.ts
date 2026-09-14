@@ -69,16 +69,27 @@ export const PAPER_GENERATION: GenerationParams = {
 
 /**
  * full    = 3 warm-up + 30 questions × 3 levels (ISTRUZIONI §3)
+ * ridotta = 3 warm-up + every third question (n = 0, 3, … 27) × 3 levels.
+ *           A declared deviation for models too slow for `full` on one phone
+ *           (SmolLM3-3B): on the completed sessions the 30-run subset kept the
+ *           medians of ttft, intermediate e2e and its p90 within ~5-10%.
  * repeat  = 3 warm-up + 5 questions × intermediate × 5 repetitions
  * advices = spending advice on fixed transactions × 10 (§5)
  * prova   = 1 warm-up + 2 runs, written apart: a check of the setup, not data.
  *           With `items` ("26a,27b,27i": question n + b/i/a) it replays exactly
  *           those runs, to reproduce a problem seen in a session.
  */
-export type SessionMode = 'full' | 'repeat' | 'advices' | 'prova';
+export type SessionMode = 'full' | 'ridotta' | 'repeat' | 'advices' | 'prova';
 
 const RUN_TIMEOUT_MS = 20 * 60 * 1000;
 const ADVICES_RUNS   = 10;
+
+/**
+ * The protocol wants the battery above 50% and power saving off (ISTRUZIONI
+ * §3). A session pauses as soon as a run ends outside that, and is resumed
+ * after recharging with `from` (the next run in the original order).
+ */
+const MIN_BATTERY_PCT = 50;
 
 // ─── Output files ─────────────────────────────────────────────────────────────
 
@@ -442,7 +453,9 @@ async function runChecks(model: LocalModel, ctx: any) {
 // ─── Crash / OOM recovery ─────────────────────────────────────────────────────
 
 function classifyExit(exit: ExitReason | null): string {
-  if (!exit) return 'crash';
+  // Android records why an app process ended, but keeps no record at all when
+  // the whole phone turns off (flat battery, power button).
+  if (!exit) return 'device_shutdown';
   if (exit.reason === 'LOW_MEMORY' || /low.?mem|lmk|oom/i.test(exit.description)) return 'OOM';
   if (exit.reason === 'USER_REQUESTED' || exit.reason === 'USER_STOPPED') return 'interrupted';
   return 'crash';
@@ -468,7 +481,9 @@ export async function recoverInterrupted(): Promise<string | null> {
   const exit = exits.find(e => e.timestamp >= pending.started_wall_ms) ?? null;
   const error = classifyExit(exit);
   const { phase, started_wall_ms, session_row, output_dir, ...row } = pending;
-  const endedAt = new Date(exit?.timestamp ?? Date.now()).toISOString();
+  // With no exit record the end time is unknown: the run's start is the last
+  // moment the app is known to have been running.
+  const endedAt = new Date(exit?.timestamp ?? started_wall_ms).toISOString();
 
   // Back into the directory of the interrupted session (measurements or prova).
   outputDir = output_dir ?? OUTPUT_DIR;
@@ -478,7 +493,9 @@ export async function recoverInterrupted(): Promise<string | null> {
       await appendRow(files().sessions, {
         ...session_row,
         session_end: endedAt,
+        session_end_known: !!exit,
         completed: false,
+        last_order: phase === 'load' ? null : row.order_in_session ?? null,
         error: phase === 'load' ? error : `${error} during run ${row.run_id}`,
       });
     }
@@ -495,12 +512,19 @@ export async function recoverInterrupted(): Promise<string | null> {
 let loadsInThisProcess = 0;
 let sessionRunning = false;
 
-type PlanItem = { q: Question; level: ProficiencyLevel; warmup: boolean; repeat: number | null };
+type PlanItem = {
+  q:       Question;
+  level:   ProficiencyLevel;
+  warmup:  boolean;
+  repeat:  number | null;
+  /** Position in the session's fixed order; null for a resumed part's warm-up. */
+  order:   number | null;
+};
 
 const LEVEL_CODES: Record<string, ProficiencyLevel> = { b: 'base', i: 'intermediate', a: 'advanced' };
 
 /** "26a,27b" → question 26 advanced, question 27 base. */
-function parseItems(items: string, questions: Question[]): PlanItem[] {
+function parseItems(items: string, questions: Question[]): Omit<PlanItem, 'order'>[] {
   return items.split(',').map(code => {
     const m = code.trim().match(/^(\d+)([bia])$/);
     const q = m ? questions.find(x => x.n === Number(m[1])) : undefined;
@@ -509,33 +533,51 @@ function parseItems(items: string, questions: Question[]): PlanItem[] {
   });
 }
 
-/** Warm-up (first questions, intermediate), then the fixed order of §3. */
-function plan(mode: 'full' | 'repeat' | 'prova', lang: Lang, items?: string): PlanItem[] {
+/**
+ * Warm-up (first questions, intermediate), then the fixed order of §3, every
+ * item numbered. With `resumeFrom` the session continues an interrupted one:
+ * warm-up again (fresh process, cold model), then the items from that number
+ * on, keeping the original numbering.
+ */
+function plan(mode: Exclude<SessionMode, 'advices'>, lang: Lang, items?: string, resumeFrom?: number): PlanItem[] {
   const questions = QUESTIONS[lang];
-  const warmup = (count: number): PlanItem[] => questions.slice(0, count)
+  const warmup = (count: number): Omit<PlanItem, 'order'>[] => questions.slice(0, count)
     .map(q => ({ q, level: 'intermediate', warmup: true, repeat: null }));
 
+  let sequence: Omit<PlanItem, 'order'>[];
+  let warmupCount: number;
   if (mode === 'prova') {
-    if (items) return parseItems(items, questions);
-    return [
+    warmupCount = items ? 0 : 1;
+    sequence = items ? parseItems(items, questions) : [
       ...warmup(1),
       { q: questions[0], level: 'base', warmup: false, repeat: null },
       { q: questions[0], level: 'advanced', warmup: false, repeat: null },
     ];
-  }
-  if (mode === 'full') {
-    return [
+  } else if (mode === 'full' || mode === 'ridotta') {
+    warmupCount = 3;
+    sequence = [
       ...warmup(3),
-      ...questions.flatMap(q => LEVELS.map(level => ({ q, level, warmup: false, repeat: null }))),
+      ...questions
+        .filter(q => mode === 'full' || q.n % 3 === 0)
+        .flatMap(q => LEVELS.map(level => ({ q, level, warmup: false, repeat: null }))),
+    ];
+  } else {
+    // Repeatability: 5 questions × intermediate × 5 repetitions.
+    warmupCount = 3;
+    sequence = [
+      ...warmup(3),
+      ...[1, 2, 3, 4, 5].flatMap(repeat =>
+        questions.slice(0, 5).map(q => ({ q, level: 'intermediate' as ProficiencyLevel, warmup: false, repeat })),
+      ),
     ];
   }
-  // Repeatability: 5 questions × intermediate × 5 repetitions.
-  return [
-    ...warmup(3),
-    ...[1, 2, 3, 4, 5].flatMap(repeat =>
-      questions.slice(0, 5).map(q => ({ q, level: 'intermediate' as ProficiencyLevel, warmup: false, repeat })),
-    ),
-  ];
+
+  const numbered: PlanItem[] = sequence.map((item, i) => ({ ...item, order: i + 1 }));
+  if (!resumeFrom) return numbered;
+
+  const rest = numbered.filter(item => item.order! >= resumeFrom && !item.warmup);
+  if (!rest.length) throw new Error(`nothing left to run from ${resumeFrom} (last is ${numbered.length})`);
+  return [...warmup(warmupCount).map(item => ({ ...item, order: null })), ...rest];
 }
 
 export type SessionOptions = {
@@ -549,6 +591,8 @@ export type SessionOptions = {
   ignoreFailedChecks?:  boolean;
   /** 'prova' only: the runs to replay, e.g. "26a,27b,27i". */
   items?:               string;
+  /** Continue the last session of this model and mode from this run number. */
+  resumeFrom?:          number;
 };
 
 export async function runSession(o: SessionOptions): Promise<void> {
@@ -569,13 +613,19 @@ export async function runSession(o: SessionOptions): Promise<void> {
     const sessionId = `${deviceSlug}_${model.id}_${mode}_${started.toISOString().replace(/[-:]/g, '').slice(0, 15)}`;
     const stat = await RNFS.stat(modelPath(model)).catch(() => null);
     const generation = mode === 'advices' ? ADVICES_GENERATION : PAPER_GENERATION;
-    // Parse before loading: a typo in `items` should not cost a model load.
-    const items = mode === 'advices' ? [] : plan(mode, model.lang, o.items);
+    if (o.resumeFrom && mode === 'advices') throw new Error('advices sessions are short: rerun them instead of resuming');
+    // Parse before loading: a typo in `items` or `from` should not cost a model load.
+    const items = mode === 'advices' ? [] : plan(mode, model.lang, o.items, o.resumeFrom);
+    const resumed = o.resumeFrom
+      ? (await readRows(files().sessions)).filter(s => s.model_file === model.cacheName && s.mode === mode).pop() ?? null
+      : null;
 
     const sessionRow: Record<string, any> = {
       session_id:             sessionId,
       mode,
       items:                  o.items ?? null,
+      resume_of:              resumed?.session_id ?? null,
+      resume_from:            o.resumeFrom ?? null,
       device:                 deviceRecord(device),
       device_full:            device,
       app:                    appRecord(),
@@ -594,6 +644,7 @@ export async function runSession(o: SessionOptions): Promise<void> {
     const rowBase = (runId: string) => ({
       run_id:        runId,
       session_id:    sessionId,
+      resume_of:     sessionRow.resume_of,
       timestamp:     new Date().toISOString(),
       device:        sessionRow.device,
       build:         probe.buildType,
@@ -607,7 +658,7 @@ export async function runSession(o: SessionOptions): Promise<void> {
     });
 
     // Load: cold (first load of a fresh process), then warm.
-    say(`[${sessionId}] caricamento ${model.cacheName}`);
+    say(`[${sessionId}] caricamento ${model.cacheName}${o.resumeFrom ? ` (ripresa da ${o.resumeFrom} di ${sessionRow.resume_of ?? '?'})` : ''}`);
     const loadRunId = `${deviceSlug}_${model.id}_load`;
     await writePending({
       ...rowBase(loadRunId), workflow: 'load', phase: 'load',
@@ -655,8 +706,12 @@ export async function runSession(o: SessionOptions): Promise<void> {
       return;
     }
 
-    const counts = { total: 0, failed: 0 };
-    const context = { ui, model, sessionRow, rowBase, network, deviceSlug, counts, say };
+    const context: RunContext = {
+      ui, model, sessionRow, rowBase, network, deviceSlug,
+      counts: { total: 0, failed: 0 },
+      paused: null,
+      say,
+    };
 
     if (mode === 'advices') await runAdvices(context);
     else await runChat(context, items);
@@ -668,12 +723,15 @@ export async function runSession(o: SessionOptions): Promise<void> {
       conditions_end:        end,
       free_storage_after_mb: round1(deviceEnd.freeStorageMb),
       session_end:           new Date().toISOString(),
-      runs_total:            counts.total,
-      runs_failed:           counts.failed,
-      completed:             true,
-      error:                 null,
+      runs_total:            context.counts.total,
+      runs_failed:           context.counts.failed,
+      completed:             !context.paused,
+      paused:                context.paused,
+      error:                 context.paused ? 'battery_low' : null,
     });
-    say(`[${sessionId}] fine: ${counts.total} esecuzioni, ${counts.failed} fallite`);
+    say(context.paused
+      ? `[${sessionId}] in pausa: ${context.counts.total} esecuzioni. Ricarica, riavvia e riprendi con &from=${context.paused.next_order}`
+      : `[${sessionId}] fine: ${context.counts.total} esecuzioni, ${context.counts.failed} fallite`);
   } finally {
     network.uninstall();
     probe.keepScreenOn(false);
@@ -681,6 +739,8 @@ export async function runSession(o: SessionOptions): Promise<void> {
     sessionRunning = false;
   }
 }
+
+type Pause = { after_order: number | null; next_order: number | null; battery: number; power_save: boolean };
 
 type RunContext = {
   ui:         BenchUI;
@@ -690,6 +750,8 @@ type RunContext = {
   network:    ReturnType<typeof installNetworkCounter>;
   deviceSlug: string;
   counts:     { total: number; failed: number };
+  /** Set when the battery or power saving took the phone out of the protocol. */
+  paused:     Pause | null;
   say:        (line: string) => void;
 };
 
@@ -699,9 +761,12 @@ async function probed<T>(
   row: Record<string, any>,
   work: () => Promise<T>,
 ): Promise<{ value: T | null; error: string | null; errorMessage: string | null; probes: Record<string, any> }> {
-  await writePending({ ...row, phase: 'run', started_wall_ms: Date.now(), session_row: c.sessionRow });
-
   const before = await probe.conditions();
+  await writePending({
+    ...row, battery_before: before.battery,
+    phase: 'run', started_wall_ms: Date.now(), session_row: c.sessionRow,
+  });
+
   const memBefore = await probe.pssMb();
   const sampler = startPeakSampler(250);
   const t0 = now();
@@ -735,6 +800,7 @@ async function probed<T>(
       battery_before:    before.battery,
       battery_after:     after.battery,
       charging:          before.charging || after.charging,
+      power_save:        before.powerSave || after.powerSave,
       airplane_mode:     before.airplaneMode && after.airplaneMode,
       network_requests:  requests.length,
       network_urls:      requests.map(r => `${r.kind} ${r.url}`),
@@ -742,23 +808,43 @@ async function probed<T>(
   };
 }
 
+/**
+ * After a run: pause the session if the next run would start outside the
+ * protocol (battery at or below MIN_BATTERY_PCT, or power saving on).
+ */
+function pauseIfOutOfProtocol(
+  c: RunContext,
+  probes: Record<string, any>,
+  afterOrder: number | null,
+  nextOrder: number | null,
+): boolean {
+  if (probes.battery_after > MIN_BATTERY_PCT && !probes.power_save) return false;
+  c.paused = { after_order: afterOrder, next_order: nextOrder, battery: probes.battery_after, power_save: probes.power_save };
+  c.say(`batteria ${probes.battery_after}%${probes.power_save ? ', risparmio energetico attivo' : ''}: pausa dopo l'esecuzione ${afterOrder}`);
+  return true;
+}
+
 async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
   const lang = c.model.lang;
-  let order = 0;
+  const lastOrder = Math.max(...items.map(item => item.order ?? 0));
+  let warmups = 0;
 
-  for (const item of items) {
-    order++;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.order == null) warmups++;
+    // A resumed part's warm-up has no place in the fixed order: w1, w2, w3.
+    const label = item.order != null ? pad(item.order) : `w${warmups}`;
     const row = {
-      ...c.rowBase(`${c.deviceSlug}_${c.model.id}_${pad(order)}`),
+      ...c.rowBase(`${c.deviceSlug}_${c.model.id}_${c.sessionRow.resume_of ? 'ripresa_' : ''}${label}`),
       workflow:         'chat',
       n:                item.q.n,
       pair_id:          item.q.pair_id,
       livello:          item.level,
-      order_in_session: order,
+      order_in_session: item.order,
       warmup:           item.warmup,
       repeat_index:     item.repeat,
     };
-    c.say(`${order}/${items.length} n=${item.q.n} ${item.level}${item.warmup ? ' (riscaldamento)' : ''}`);
+    c.say(`${item.order ?? `w${warmups}`}/${lastOrder} n=${item.q.n} ${item.level}${item.warmup ? ' (riscaldamento)' : ''}`);
 
     const { value: out, error: probeError, errorMessage, probes } = await probed(c, row, () =>
       c.ui.turn({ question: item.q.question, level: item.level, model: c.model, generation: PAPER_GENERATION }),
@@ -813,7 +899,7 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
     c.say(
       error
         ? `  errore ${error}: ${errorMessage ?? `n_past ${result.n_past_after}, ${outputTokens} tok`}`
-        : `  prompt ${promptTokens} tok, ttft_ui ${result.ttft_ui_ms} ms, ${outputTokens} tok in ${result.decode_ms} ms, e2e ${result.e2e_ms} ms, picco ${probes.peak_mem_mb} MB`,
+        : `  prompt ${promptTokens} tok, ttft_ui ${result.ttft_ui_ms} ms, ${outputTokens} tok in ${result.decode_ms} ms, e2e ${result.e2e_ms} ms, picco ${probes.peak_mem_mb} MB, batteria ${probes.battery_after}%`,
     );
 
     c.counts.total++;
@@ -822,6 +908,9 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
       c.say('OOM: sessione interrotta');
       return;
     }
+
+    const next = items[i + 1];
+    if (next && pauseIfOutOfProtocol(c, probes, item.order, next.order ?? item.order)) return;
   }
 }
 
@@ -883,5 +972,7 @@ async function runAdvices(c: RunContext): Promise<void> {
     c.counts.total++;
     if (error) c.counts.failed++;
     if (error === 'OOM') return;
+    // Ten short runs: rerun the whole session after recharging.
+    if (order < ADVICES_RUNS && pauseIfOutOfProtocol(c, probes, order, null)) return;
   }
 }

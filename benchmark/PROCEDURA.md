@@ -82,6 +82,15 @@ I file sono cumulativi: ogni sessione aggiunge righe, nessuna viene cancellata.
 
 `full` = 3 domande di riscaldamento + 90 esecuzioni (30 domande × 3 livelli).
 
+`ridotta` = 3 domande di riscaldamento + 30 esecuzioni: una domanda ogni tre
+(n = 0, 3, 6, … 27) × 3 livelli, nell'ordine fisso. È una **deviazione dal
+protocollo**, da dichiarare nel rapporto, pensata per SmolLM3-3B, troppo lento
+per una sessione completa su una carica. Sulle sessioni complete già misurate
+(270M Q8/Q4, 1B Q8/Q4) il sottoinsieme di 30 esecuzioni ha dato mediane di primo
+token, risposta intermediate e suo 90° percentile entro circa il 5–10% delle 90;
+non è affidabile per il rapporto fra lunghezza delle risposte advanced e base,
+e una sessione corta scalda meno il telefono.
+
 Le durate vengono dalla prova del 10/09/2026 con Gemma3-1B Q8 sul Galaxy A52:
 circa 43 s per elaborare il prompt (circa 2000 token, ~47 token/s) più circa
 7 token/s di generazione, quindi ~55 s per esecuzione. Gli altri modelli sono
@@ -89,11 +98,33 @@ stimati in proporzione alla dimensione. Il 3B Q8 difficilmente si carica: in
 RAM llama.cpp tiene il file mappato più una copia riorganizzata dei pesi
 (circa 2 × 3,1 GB) su 5,4 GB disponibili.
 
-## Se l'app si chiude durante una sessione
+## Batteria al 50% o sotto: pausa e ripresa
 
-Riaprila con il comando del punto 4 **senza** `&autostart=1`: all'avvio l'app
-registra l'esecuzione interrotta in `runs.jsonl` con il motivo che dà Android
-(`OOM` se il sistema l'ha chiusa per memoria, altrimenti `crash`).
+Dopo ogni esecuzione l'app controlla la batteria. Se è scesa al 50% o sotto, o
+se si è attivato il risparmio energetico, la sessione si ferma in modo pulito
+(`sessioni.jsonl`: `error: "battery_low"`, `paused.next_order`) e il registro
+mostra da dove riprendere. Allora:
+
+1. ricarica (meglio fino al 100%) e riavvia il telefono;
+2. rimetti le condizioni del punto 3;
+3. rilancia il comando del punto 4 aggiungendo `&from=<N>` (N = `next_order`),
+   per esempio `...model=3b-q4-it&mode=full&from=51&autostart=1`.
+
+La ripresa rifà il caricamento a freddo e le domande di riscaldamento, poi
+continua dall'esecuzione N nello stesso ordine e con la stessa numerazione. La
+nuova sessione riporta `resume_of` (la sessione interrotta) e `resume_from`.
+
+## Se l'app o il telefono si spengono durante una sessione
+
+Riapri l'app con il comando del punto 4 **senza** `&autostart=1`: all'avvio
+registra l'esecuzione interrotta in `runs.jsonl` con il motivo:
+
+- `OOM` se Android l'ha chiusa per memoria;
+- `device_shutdown` se si è spento il telefono (in quel caso Android non
+  registra nulla sulla chiusura dell'app);
+- `crash` negli altri casi.
+
+Poi riprendi con `&from=<N>`, dove N è l'esecuzione interrotta.
 
 ## Cosa controlla l'app prima di misurare
 

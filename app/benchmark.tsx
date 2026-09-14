@@ -8,7 +8,8 @@
 //
 // Params: model (a BENCH_MODELS id, or "app" for the model the app ships),
 // mode (full | repeat | advices | prova), autostart=1, action=download,
-// ignoreChecks=1. See benchmark/PROCEDURA.md.
+// ignoreChecks=1, from=N (resume a paused session from run N), items=26a,27b
+// (prova only). See benchmark/PROCEDURA.md.
 //
 // Chat turns run through the chat's runChatTurn() and are rendered by the
 // chat's ChatScreen, so ttft_ui_ms and e2e_ms cover the user's code path.
@@ -54,6 +55,7 @@ const findModel = (id: string): LocalModel | undefined =>
 
 const MODES: { key: SessionMode; label: string }[] = [
   { key: 'full', label: 'Sessione completa (3 + 90)' },
+  { key: 'ridotta', label: 'Ridotta (3 + 30)' },
   { key: 'repeat', label: 'Ripetibilità (5 × 5)' },
   { key: 'advices', label: 'Consigli spese (10)' },
   { key: 'prova', label: 'Prova (3, non sono dati)' },
@@ -86,7 +88,7 @@ export default function Benchmark() {
 
 function BenchmarkScreen() {
   const params = useLocalSearchParams<{
-    model?: string; mode?: string; autostart?: string; action?: string; ignoreChecks?: string;
+    model?: string; mode?: string; autostart?: string; action?: string; ignoreChecks?: string; from?: string;
   }>();
 
   const [selectedModel, setSelectedModel] = useState<string>(params.model ?? BENCH_MODELS[0].id);
@@ -254,6 +256,7 @@ function BenchmarkScreen() {
       conditionsOverridden: overridden,
       ignoreFailedChecks: params.ignoreChecks === '1',
       items: typeof (params as any).items === 'string' ? (params as any).items : undefined,
+      resumeFrom: params.from ? Number(params.from) : undefined,
     });
   });
 
