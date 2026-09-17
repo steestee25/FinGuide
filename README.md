@@ -14,7 +14,7 @@ A cross-platform personal finance assistant combining on-device Small Language M
 
 A pre-populated reviewer account is available. On the login page, use the dedicated button or sign in with email using the following credentials:
 
-- **Email**: reviewer@cikm.com
+- **Email**: reviewer@reviewer.com
 - **Password**: 123456
 
 ## 📸 App Screenshots
