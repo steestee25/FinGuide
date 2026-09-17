@@ -177,7 +177,7 @@ export default function AuthScreen() {
               onNext={() => setAuthStep('email')}
               onAccessExisting={async () => {
                 await handleAuth('signIn', {
-                  email: 'reviewer@cikm.com',
+                  email: 'reviewer@reviewer.com',
                   password: '123456',
                 })
               }}
