@@ -34,8 +34,8 @@ A pre-populated reviewer account is available. On the login page, use the dedica
 
 ### 🤖 RAG-Powered AI Assistant
 
-- **Grounded Responses**: Retrieves relevant passages from the CONSOB corpus before generating each answer, reducing hallucinations
-- **Citation Panel**: Displays CONSOB source URLs alongside every response for transparency and verifiability
+- **Grounded Responses**: Retrieves relevant passages from authoritative regulator corpora before generating each answer, reducing hallucinations (CONSOB for Italian; FCA and the Bank of England for English)
+- **Citation Panel**: Displays regulator source URLs alongside every response for transparency and verifiability (CONSOB / FCA / Bank of England, depending on the session language)
 - **Literacy-Aware Guidance**: Adapts vocabulary, explanation depth, and technical terminology to the user's financial knowledge level (Base / Intermediate / Advanced)
 
 ### 📋 Financial Literacy Onboarding
@@ -67,13 +67,13 @@ A pre-populated reviewer account is available. On the login page, use the dedica
 
 ## 🧠 System Architecture
 FinGuide consists of three main components:
-**1. Domain-Specific Dataset** - 1,740 question–answer pairs derived from CONSOB's "Investor Education" materials, covering financial planning, investments, risk management, investor protection, and more. Split into training (1,310), validation (256), and test (174) sets.
+**1. Domain-Specific Datasets** - Two curated question–answer datasets built from authoritative regulator materials. The Italian dataset contains 1,740 pairs derived from CONSOB's "Investor Education" materials (train 1,310 / validation 256 / test 174). The English dataset contains 1,594 pairs derived from the FCA's consumer and InvestSmart guidance and the Bank of England's explainers (train 1,135 / validation 230 / test 155). Both cover financial planning, investments, risk management, investor protection, and more. Each answer is written at three levels of reader expertise (basic, intermediate, advanced).
 
-**2. Fine-Tuned Small Language Models** - Three compact open-weight models (Gemma 3 270M, Gemma 3 1B, SmolLM3 3B) adapted to the financial domain via LoRA, achieving BERTScore F1 improvements of **+7.0% to +11.7%** over few-shot baselines.
+**2. Fine-Tuned Small Language Models** - Three compact open-weight models (Gemma 3 270M, Gemma 3 1B, SmolLM3 3B) adapted to the financial domain via LoRA, one adapter per language.
 
 **3. Cross-Platform Application** - A sequential pipeline connecting user onboarding → conversational RAG assistance → financial tracking and analysis.
 
-The RAG pipeline perform retrieval using BM25 over the CONSOB corpus and injects the top-k passages as context before generation.
+The RAG pipeline performs retrieval with BM25 over the language-specific corpus (CONSOB for Italian; FCA and Bank of England for English) and injects the top-k passages as context before generation.
 
 ## 🚀 Installation
 
@@ -339,6 +339,9 @@ Every repository also holds the other quantization, so a build can switch betwee
 - [React Native Documentation](https://reactnative.dev/)
 - [Supabase Documentation](https://supabase.com/docs)
 - [CONSOB Investor Education](https://www.consob.it/web/investor-education)
+- [FCA – Consumers](https://www.fca.org.uk/consumers) · [FCA InvestSmart](https://www.fca.org.uk/investsmart)
+- [Bank of England – Explainers](https://www.bankofengland.co.uk/explainers)
+
 
 ## 🤝 Contributing
 
@@ -368,11 +371,12 @@ For issues, suggestions, or questions:
 
 Thanks to:
 
-- [CONSOB](https://www.consob.it/) for the educational materials and research authorization
+- [CONSOB](https://www.consob.it/) for the Italian educational materials and research authorization
+- [Financial Conduct Authority (FCA)](https://www.fca.org.uk/) and the [Bank of England](https://www.bankofengland.co.uk/) for the English educational materials
 - [Expo](https://expo.dev/) for the cross-platform framework
 - [Supabase](https://supabase.com/) for the backend infrastructure
 - [Hugging Face](https://huggingface.co/) for model hosting
 
 ---
 
-*Last updated: June 2026*
+*Last updated: September 2026*
