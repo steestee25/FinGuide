@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "FinGuide",
+    "slug": "lira",
     "displayName": "FinGuide",
     "scheme": "com.stefano10.lira",
     "web": {
