@@ -1,7 +1,7 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useIsFocused } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Linking,
@@ -25,6 +25,9 @@ import {
   fetchExpensesByCategoryLastYear,
 } from '../../lib/transactions'
 import locales from '../../locales/locales.json'
+import { useIsReviewer, useSharedLevel } from '../../lib/levelStore'
+import { suggerimentoDaSpese } from '../../lib/projection'
+
 import { HEADER_TOP, HORIZONTAL_GUTTER } from '../../styles/spacing'
 import { LEVEL_CONFIG, PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout'
 
@@ -72,6 +75,26 @@ function stripCodeFences(raw: string): string {
     .replace(/^```[a-z]*\n?/i, '')
     .replace(/\n?```$/i, '')
     .trim()
+}
+
+// The model sometimes groups advices under the wrong category (e.g. an Entertainment tip
+// under Restaurant). Use the first category the text names; otherwise keep the model's.
+function fixAdviceCategories(
+  advices: Advice[],
+  categories: string[],
+  labelOf: (c: string) => string
+): Advice[] {
+  const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return advices.map((a) => {
+    let best: { category: string; index: number } | null = null
+    for (const c of categories) {
+      for (const name of [c, labelOf(c)]) {
+        const m = new RegExp(`\\b${escape(name)}\\b`, 'i').exec(a.text)
+        if (m && (!best || m.index < best.index)) best = { category: c, index: m.index }
+      }
+    }
+    return best ? { ...a, category: best.category } : a
+  })
 }
 
 /**
@@ -201,15 +224,10 @@ export default function Advices() {
   const insets = useSafeAreaInsets()
   const isFocused = useIsFocused()
   const router = useRouter()
-  const { level } = useLocalSearchParams()
 
   const [period, setPeriod] = useState<PeriodType>('month')
-  const levelParam = Array.isArray(level) ? level[0] : level
-  const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>(
-    PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)
-      ? (levelParam as ProficiencyLevel)
-      : 'intermediate'
-  )
+  const [proficiencyLevel, setProficiencyLevel] = useSharedLevel()
+  const isReviewer = useIsReviewer()
   const [advices, setAdvices] = useState<Advice[]>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -220,6 +238,7 @@ export default function Advices() {
     gradientCenterColor?: string
     label: string
     key?: string
+    months?: number
   }[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -287,18 +306,11 @@ export default function Advices() {
   }
 
 
-  // Aggiorna il livello di competenza dell'utente quando level cambia
-  useEffect(() => {
-    if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
-      setProficiencyLevel(levelParam as ProficiencyLevel)
-    }
-  }, [levelParam])
 
   const cycleProficiencyLevel = () => {
     const currentIndex = PROFICIENCY_LEVELS.indexOf(proficiencyLevel)
     const nextLevel = PROFICIENCY_LEVELS[(currentIndex + 1) % PROFICIENCY_LEVELS.length]
     setProficiencyLevel(nextLevel)
-    router.setParams({ level: nextLevel })
   }
 
   useEffect(() => {
@@ -306,10 +318,15 @@ export default function Advices() {
       fetchAndGenerate()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, period, proficiencyLevel, authLoading, isFocused])
+  }, [session, period, proficiencyLevel, locale, authLoading, isFocused])
+
+  // Each fetch gets an id; results from a previous period/level are discarded.
+  const requestId = useRef(0)
 
   const fetchAndGenerate = async () => {
     if (!session?.user) return
+    const id = ++requestId.current
+    const isStale = () => id !== requestId.current
     setLoading(true)
     setAdvices([])
     setPieData([])
@@ -326,6 +343,7 @@ export default function Advices() {
         rows = (await fetchExpensesByCategoryLastYear(session.user.id)) || []
       }
       console.log('[Fetch] rows:', rows.length, 'period:', period)
+      if (isStale()) return
 
       if (!rows.length) {
         setAdvices([
@@ -365,6 +383,7 @@ export default function Advices() {
           gradientCenterColor: gradient,
           label: localizedLabel,
           key: r.category,
+          months: r.months,
         }
         if (idx === maxIndex) (item as any).focused = true
         return item
@@ -386,19 +405,22 @@ export default function Advices() {
       console.log('[Fetch] summary:', JSON.stringify(summary))
 
       // 4. Generate advices from server
-      await generateWithServer(summary)
+      await generateWithServer(summary, isStale)
     } catch (err) {
       console.error('[Fetch] error:', err)
+      if (isStale()) return
       setError(t('advicesLabels.fetchError'))
       setAdvices([{ text: t('advicesLabels.fetchError'), category: 'General' }])
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (!isStale()) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }
 
 
-  const generateWithServer = async (summary: any) => {
+  const generateWithServer = async (summary: any, isStale: () => boolean) => {
     console.log('[Server] starting request to analyze_transaction…')
     setStatusText(t('advicesLabels.analysis'))
 
@@ -412,6 +434,7 @@ export default function Advices() {
         totalSpent: summary.total,
         period: summary.period,
         proficiency_level: proficiencyLevel,
+        lingua: locale,
       }
 
       console.log('[Server] payload:', JSON.stringify(payload))
@@ -420,6 +443,7 @@ export default function Advices() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify(payload),
       })
@@ -431,9 +455,14 @@ export default function Advices() {
       }
 
       const data = await response.json()
+      if (isStale()) return
       console.log('[Server] raw response keys:', Object.keys(data))
 
-      const parsed = parseServerResponse(data)
+      const parsed = fixAdviceCategories(
+        parseServerResponse(data),
+        summary.topCategories.map((c: any) => c.category),
+        (c) => categoriesFromLocale[c]?.label || c
+      )
       console.log('[Server] parsed advices:', parsed.length)
 
       if (parsed.length > 0) {
@@ -444,6 +473,7 @@ export default function Advices() {
       }
     } catch (e) {
       console.error('[Server] error:', e)
+      if (isStale()) return
       setError(
         t('advicesLabels.serverError', {
           message: e instanceof Error ? e.message : t('chat.unknownError'),
@@ -451,7 +481,7 @@ export default function Advices() {
       )
       generateFallback(summary)
     } finally {
-      setStatusText('')
+      if (!isStale()) setStatusText('')
     }
   }
 
@@ -537,7 +567,7 @@ export default function Advices() {
           <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
             {t('tabs.analysis')}
           </Text>
-          <TouchableOpacity
+          {isReviewer && <TouchableOpacity
             onPress={cycleProficiencyLevel}
             style={styles.levelButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -550,7 +580,7 @@ export default function Advices() {
             <Text style={styles.levelButtonText}>
               {LEVEL_CONFIG[proficiencyLevel].label}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
       </View>
 
@@ -689,6 +719,39 @@ export default function Advices() {
             >
               {t('advicesLabels.advices')}
             </Text>
+
+            {(() => {
+              const s = suggerimentoDaSpese(
+                pieData.map((p) => ({
+                  category: p.key ?? '',
+                  total: p.value,
+                  // Never more months than the selected period spans.
+                  months: Math.min(p.months ?? 1, period === 'month' ? 1 : period === '3months' ? 3 : 12),
+                })),
+                proficiencyLevel,
+                locale === 'en' ? 'en' : 'it',
+                (c) => categoriesFromLocale[c]?.label || c,
+                period
+              )
+              if (!s) return null
+              return (
+                <View style={{ backgroundColor: '#F4F6FB', borderRadius: 12, padding: 15, marginBottom: 12 }}>
+                  <Text style={{ color: '#333', lineHeight: 20 }}>{s.messaggio}</Text>
+                  <Text style={{ color: '#888', fontSize: 11, marginTop: 6 }}>{s.avvertenza}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: '/chat',
+                        params: { rag: '1', ask: s.domanda_chat, askId: String(Date.now()) },
+                      })
+                    }
+                    style={{ marginTop: 10, backgroundColor: COLORS.primary, borderRadius: 8, padding: 10 }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center' }}>{s.collegamento}</Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            })()}
 
             {advices.map((item, idx) => {
               const baseColor = getCategoryBaseColor(item.category)

@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../constants/color';
@@ -57,6 +58,8 @@ export default function ModelSelector({ onSelect, selectedKey, models = DEFAULT_
         <Text numberOfLines={1} style={styles.selectorText}>
           {models.find(m => m.key === selected)?.label ?? 'Select Model'}
         </Text>
+        {/* The compact (mobile) header has no room for the chevron. */}
+        {!compact && <Ionicons name="chevron-down" size={16} color={COLORS.temp3} />}
       </TouchableOpacity>
 
       <Modal visible={visible} transparent animationType="fade">
@@ -104,9 +107,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   selectorButtonCompact: {
-    // Sized to the longest option label ('Gemma 270M'): ~72dp of text at
-    // fontSize 12, + 8 text marginRight + 16 horizontal padding.
-    minWidth: 96,
+    // Sized to the longest option label ('Gemma 270M', 'SmolLM3 3B'): measured
+    // at ~92dp of text on a Galaxy A52 at fontSize 12, + 8 text marginRight
+    // + 16 horizontal padding. At 96dp those labels came out as 'Gemma 2…'.
+    minWidth: 116,
     paddingHorizontal: 8,
   },
   selectorText: {

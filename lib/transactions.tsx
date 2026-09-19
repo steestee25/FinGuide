@@ -340,7 +340,7 @@ export const fetchExpensesByCategoryLastMonth = async (userId: string) => {
 
     const { data, error } = await supabase
       .from('transactions')
-      .select('category, amount')
+      .select('category, amount, date')
       .eq('user_id', userId)
       .gte('date', startOfCurrentMonth.toISOString())
       .lt('date', startOfNextMonth.toISOString())
@@ -372,7 +372,7 @@ export const fetchExpensesByCategoryLast3Months = async (userId: string) => {
 
     const { data, error } = await supabase
       .from('transactions')
-      .select('category, amount')
+      .select('category, amount, date')
       .eq('user_id', userId)
       .gte('date', start.toISOString())
       .lte('date', end.toISOString())
@@ -404,7 +404,7 @@ export const fetchExpensesByCategoryLastYear = async (userId: string) => {
 
     const { data, error } = await supabase
       .from('transactions')
-      .select('category, amount')
+      .select('category, amount, date')
       .eq('user_id', userId)
       .gte('date', start.toISOString())
       .lte('date', end.toISOString())

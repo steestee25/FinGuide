@@ -137,8 +137,8 @@ export default function ChatScreen({
                     <View style={styles.disclaimerContainer}>
                       <Text style={styles.disclaimerText}>
                         {locale === 'en'
-                          ? 'LIRA is an AI system and can make errors. It does not provide financial advice or investment recommendations. Always verify information before making financial decisions.'
-                          : 'LIRA è un sistema di IA e può commettere errori. Non fornisce consulenza finanziaria né consigli di investimento. \n Verifica sempre le informazioni prima di prendere decisioni finanziarie.'}
+                          ? 'FinGuide is an AI system and can make errors. It does not provide financial advice or investment recommendations. Always verify information before making financial decisions.'
+                          : 'FinGuide è un sistema di IA e può commettere errori. Non fornisce consulenza finanziaria né consigli di investimento. \n Verifica sempre le informazioni prima di prendere decisioni finanziarie.'}
                       </Text>
                     </View>
                   )}
@@ -178,8 +178,8 @@ export default function ChatScreen({
             <View style={styles.disclaimerContainer}>
               <Text style={styles.disclaimerText}>
                 {locale === 'en'
-                  ? 'LIRA is an artificial intelligence system and can make errors. It does not provide financial advice or investment recommendations. Always verify information before making financial decisions.'
-                  : 'LIRA è un sistema di intelligenza artificiale e può commettere errori. Non fornisce consulenza finanziaria né consigli di investimento. Verifica sempre le informazioni prima di prendere decisioni finanziarie.'}
+                  ? 'FinGuide is an artificial intelligence system and can make errors. It does not provide financial advice or investment recommendations. Always verify information before making financial decisions.'
+                  : 'FinGuide è un sistema di intelligenza artificiale e può commettere errori. Non fornisce consulenza finanziaria né consigli di investimento. Verifica sempre le informazioni prima di prendere decisioni finanziarie.'}
               </Text>
             </View>
           </View>

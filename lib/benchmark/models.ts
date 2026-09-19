@@ -20,11 +20,12 @@ function benchModel(
   const base = `lira-${family}-${size}-${lang === 'it' ? 'ita' : 'ing'}-sipar-3reg`;
   const filename = `${base}-${quant}.gguf`;
   return {
-    id:        `${size}-${quant === 'Q8_0' ? 'q8' : 'q4'}-${lang}`,
-    label:     `${family === 'smollm3' ? 'SmolLM3' : 'Gemma3'}-${size.toUpperCase()} ${quant} (${lang})`,
-    repo:      `Stee201/${base}`,
+    id:         `${size}-${quant === 'Q8_0' ? 'q8' : 'q4'}-${lang}`,
+    label:      `${family === 'smollm3' ? 'SmolLM3' : 'Gemma3'}-${size.toUpperCase()} ${quant} (${lang})`,
+    shortLabel: `${family === 'smollm3' ? 'SmolLM3' : 'Gemma3'}-${size.toUpperCase()}`,
+    repo:       `Stee201/${base}`,
     filename,
-    cacheName: filename,
+    cacheName:  filename,
     sizeBytes,
     lang,
     family,

@@ -1,0 +1,27 @@
+{
+  "nota": "Tabella semplice per le proiezioni illustrative dell'analisi delle spese. I conti li fa il codice, mai il modello. Mostrare sempre un intervallo (min-max) e l'avvertenza. Non e' un consiglio di investimento.",
+  "formula": "valore_finale = versamento_mensile * (((1 + r/12) ** (12 * anni) - 1) / (r/12)); con r = 0 il valore e' versamento_mensile * 12 * anni",
+  "avvertenza": {
+    "it": "Proiezione puramente illustrativa basata su rendimenti passati o ipotetici: i rendimenti futuri non sono garantiti e si puo' perdere parte del capitale. Non e' un consiglio di investimento.",
+    "en": "Illustration only, based on past or assumed returns: future returns are not guaranteed and you could get back less than you put in. This is not investment advice."
+  },
+  "it": {
+    "fonte": "COVIP, La previdenza complementare - Principali dati statistici, dicembre 2024, Tav. 4: rendimenti medi annui composti a 10 anni (fine 2014 - fine 2024), al netto dei costi e dell'imposta sostitutiva, fondi pensione negoziali e aperti.",
+    "url": "https://www.covip.it/sites/default/files/documentazionestatistica/agg_stat_dic24.pdf",
+    "livelli": {
+      "base": {"strumento": "titoli di Stato e obbligazioni", "domanda_chat": "Chi acquista un'obbligazione cosa fa?", "rendimento_min": 0.0, "rendimento_max": 2.4, "da_tabella": "obbligazionari puri 0,0-0,3; obbligazionari misti 0,7-2,4"},
+      "intermediate": {"strumento": "fondi comuni", "domanda_chat": "Cosa sono i fondi comuni?", "rendimento_min": 1.7, "rendimento_max": 2.7, "da_tabella": "bilanciati 1,7 (PIP) - 2,7 (fondi aperti)"},
+      "advanced": {"strumento": "azioni", "domanda_chat": "Quali sono i diritti dell'azionista?", "rendimento_min": 4.4, "rendimento_max": 4.7, "da_tabella": "azionari 4,4 (negoziali) - 4,7 (aperti e PIP)"}
+    },
+    "confronto": {"rivalutazione_TFR_10_anni": 2.4}
+  },
+  "en": {
+    "fonte": "FCA Handbook, COBS 13 Annex 2, 2.3R: maximum nominal projection rates firms may use in illustrations (not historical returns). Lower / intermediate / higher: 1.5% / 4.5% / 7.5% for products other than pensions; 2% / 5% / 8% for pensions.",
+    "url": "https://handbook.fca.org.uk/handbook/COBS/13/Annex2.html",
+    "livelli": {
+      "base": {"strumento": "corporate bond funds", "domanda_chat": "What are corporate bond funds?", "pagina": "https://www.fca.org.uk/news/news-stories/corporate-bond-funds", "rendimento_min": 1.5, "rendimento_max": 4.5, "da_tabella": "lower-intermediate rate, products other than pensions"},
+      "intermediate": {"strumento": "funds that invest in the stock market", "domanda_chat": "What are funds that invest in the stock market?", "pagina": "https://www.fca.org.uk/investsmart/advantages-mainstream-investments", "rendimento_min": 4.5, "rendimento_max": 4.5, "da_tabella": "intermediate rate, products other than pensions"},
+      "advanced": {"strumento": "shares", "domanda_chat": "What range of shares do different funds invest in?", "pagina": "https://www.fca.org.uk/investsmart/diversification", "rendimento_min": 4.5, "rendimento_max": 7.5, "da_tabella": "intermediate-higher rate, products other than pensions"}
+    }
+  }
+}

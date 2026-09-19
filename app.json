@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Lira",
-    "displayName": "Lira",
+    "name": "FinGuide",
+    "displayName": "FinGuide",
     "scheme": "com.stefano10.lira",
     "web": {
       "output": "server",

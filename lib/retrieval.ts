@@ -1,7 +1,7 @@
 // Retrieves relevant documents from the knowledge base using BM25.
 //
 // One corpus per language, the same ones the models were fine-tuned on:
-// 522 CONSOB paragraphs (it) and 455 FCA / Bank of England paragraphs (en).
+// 522 CONSOB paragraphs (it) and 449 FCA / Bank of England paragraphs (en).
 // Regenerate lib/corpus/ with scripts/build-benchmark-data.js.
 
 import * as bm25 from './bm25Index';

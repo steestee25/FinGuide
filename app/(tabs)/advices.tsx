@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics'
+import { useRouter } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -14,11 +15,16 @@ import { PieChart } from 'react-native-gifted-charts'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS } from '../../constants/color'
 import { useAuth } from '../../contexts/AuthContext'
+import LevelSelector from '../../components/LevelSelector'
+import { LEVEL_CONFIG, PROFICIENCY_LEVELS, type ProficiencyLevel } from './_layout'
 import { runAdvicesTurn } from '../../lib/advicesTurn'
+import { normalizeLevel } from '../../lib/chatPrompt'
 import { summarizeExpenses } from '../../lib/expenses'
 import { useTranslation } from '../../lib/i18n'
+import { useIsReviewer, useSharedLevel } from '../../lib/levelStore'
+import { suggerimentoDaSpese } from '../../lib/projection'
 import { getLlamaContext, isLlamaReady, releaseLlamaContext } from '../../lib/llamaContext'
-import { downloadUrl, getModel, minValidSize, modelPath } from '../../lib/modelConfig'
+import { ADVICES_MODEL, downloadUrl, migrateRenamedModels, minValidSize, modelPath } from '../../lib/modelConfig'
 import {
   fetchExpensesByCategoryLast3Months,
   fetchExpensesByCategoryLastMonth,
@@ -35,8 +41,6 @@ let RNFS: any = null
 if (Platform.OS !== 'web') {
   RNFS = require('react-native-fs')
 }
-
-const MODEL = getModel()
 
 type PeriodType = 'month' | '3months' | 'year'
 
@@ -73,6 +77,9 @@ export default function Advices() {
   const { session, loading: authLoading } = useAuth()
   const { t, locale } = useTranslation()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
+  const [proficiencyLevel, setProficiencyLevel] = useSharedLevel()
+  const isReviewer = useIsReviewer()
 
   const [period, setPeriod] = useState<PeriodType>('month')
   const [advices, setAdvices] = useState<Advice[]>([])
@@ -83,13 +90,19 @@ export default function Advices() {
   const [modelError, setModelError] = useState<string | null>(null)
   const [useLocalModel, setUseLocalModel] = useState(true)
   const [statusText, setStatusText] = useState('')
-  const [pieData, setPieData] = useState<{ value: number; color: string; gradientCenterColor?: string; label: string; key?: string }[]>([])
+  const [pieData, setPieData] = useState<{ value: number; color: string; gradientCenterColor?: string; label: string; key?: string; months?: number }[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  /** Category tapped on the chart, which narrows the advices shown. */
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
 
   const isInitializedRef = useRef(false)
   const pendingSummaryRef = useRef<any>(null)
   const isGeneratingRef = useRef(false)
   const isFetchingRef = useRef(false)
+  /** A fetch was requested while one was running; re-run once it finishes. */
+  const rerunRef = useRef(false)
+  /** Bumped when a queued re-run must start, so it runs with fresh settings. */
+  const [rerunToken, setRerunToken] = useState(0)
 
   // Derive category colors and info from locales
   const categoriesFromLocale: Record<string, any> = (locales as any)[locale]?.categories || {}
@@ -130,33 +143,45 @@ export default function Advices() {
 
     if (selectedIndex === index) {
       setSelectedIndex(null)
+      setFilterCategory(null)
       setPieData((prev) => prev.map((p) => ({ ...p, focused: false })))
     } else {
       setSelectedIndex(index)
       setPieData((prev) => prev.map((p, i) => ({ ...p, focused: i === index })))
-      setAdvices((prev) =>
-        prev.filter((a) => {
-          const cat = a.category
-          return cat === sliceKey || cat === slice.label || getCategoryKeyFromLabel(cat) === sliceKey
-        })
-      )
+      // Narrow the view, don't throw the advices away: this used to filter the
+      // state itself, so tapping a second slice filtered an already-filtered
+      // list down to nothing and the advices were gone until the next
+      // generation — two minutes of it.
+      setFilterCategory(sliceKey ?? null)
     }
   }
 
+  /** Advices for the tapped slice; the generic disclaimers always stay. */
+  const visibleAdvices = filterCategory
+    ? advices.filter(
+      (a) => !a.category || a.category === filterCategory || getCategoryKeyFromLabel(a.category) === filterCategory,
+    )
+    : advices
 
+
+  // The advices model does not follow the app language: it is the same base
+  // Gemma for both (lib/modelConfig.ts), so this runs once.
   useEffect(() => {
     if (Platform.OS === 'web' || isInitializedRef.current) return
     isInitializedRef.current = true
     initModel()
   }, [])
 
-  const getModelPath = () => modelPath(MODEL)
+  const MODEL = ADVICES_MODEL
 
   const initModel = async () => {
     setModelLoading(true)
     setModelError(null)
     try {
-      const path = getModelPath()
+      // Chat does this too, but Advices can be the first screen to need weights.
+      await migrateRenamedModels()
+
+      const path = modelPath(MODEL)
       console.log('[Model] path:', path)
 
       const exists = await RNFS.exists(path)
@@ -234,26 +259,34 @@ export default function Advices() {
     }
   }
 
+  // `locale` and `proficiencyLevel` are dependencies too: both go into the
+  // prompt, so changing either has to produce a new set of advices instead of
+  // leaving the previous ones on screen.
   useEffect(() => {
     if (!authLoading && session?.user) {
       fetchAndGenerate()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, period, authLoading])
+  }, [session, period, authLoading, locale, proficiencyLevel, rerunToken])
 
   const fetchAndGenerate = async () => {
     if (!session?.user) return
 
-    // Prevent concurrent fetch calls
+    // One fetch at a time. A config change that lands mid-generation (period,
+    // language, level) is remembered instead of dropped: dropping it left the
+    // previous level's advices on screen under the new level's icon.
     if (isFetchingRef.current) {
-      console.warn('[Fetch] already fetching — skipping request')
+      console.log('[Fetch] already fetching — queued a re-run for the new settings')
+      rerunRef.current = true
       return
     }
 
     isFetchingRef.current = true
     setLoading(true)
-    setAdvices([])
-    setPieData([])
+    // The previous advices stay on screen until the new ones replace them:
+    // generating them takes ~1-2 minutes on a phone, and blanking the list
+    // meant staring at a spinner for that long after every period, language or
+    // level change.
     pendingSummaryRef.current = null
 
     try {
@@ -269,7 +302,9 @@ export default function Advices() {
       console.log('[Fetch] rows:', rows.length, 'period:', period)
 
       if (!rows.length) {
+        // Nothing to chart or advise on: here the old content must go.
         setAdvices([{ text: t('advicesLabels.noExpenses'), category: 'General' }])
+        setPieData([])
         return
       }
 
@@ -284,13 +319,16 @@ export default function Advices() {
         const color = hexToRgba(base, 0.125)
         const gradient = hexToRgba(gradBase, 0.125)
         const localizedLabel = (categoriesFromLocale[r.category] && categoriesFromLocale[r.category].label) || r.category
-        const item = { value: r.total, color, gradientCenterColor: gradient, label: localizedLabel, key: r.category }
+        const item = { value: r.total, color, gradientCenterColor: gradient, label: localizedLabel, key: r.category, months: r.months }
         if (idx === maxIndex) (item as any).focused = true
         return item
       })
 
       setPieData(mapped)
+      // The biggest slice is focused for the chart only: a fresh set of advices
+      // is shown in full until the user taps a slice.
       setSelectedIndex(maxIndex)
+      setFilterCategory(null)
 
       // 3. Build compact summary for LLM (lib/expenses.ts, shared with the benchmark)
       const summary = summarizeExpenses(rows, period)
@@ -313,7 +351,14 @@ export default function Advices() {
       setAdvices([{ text: t('advicesLabels.fetchError'), category: 'General' }])
     } finally {
       isFetchingRef.current = false
-      if (!pendingSummaryRef.current) {
+      if (rerunRef.current) {
+        rerunRef.current = false
+        // Settings changed while this run was in flight: redo it with them.
+        // Through state, not a direct call: calling from here would re-enter
+        // with this render's period, language and level — the very values the
+        // re-run exists to replace.
+        setRerunToken((t) => t + 1)
+      } else if (!pendingSummaryRef.current) {
         setLoading(false)
         setRefreshing(false)
       }
@@ -341,9 +386,17 @@ export default function Advices() {
     setStatusText(t('advicesLabels.advicesGeneration'))
 
     try {
+      // Chat may have loaded its own model in the meantime: the shared context
+      // holds one at a time, so claim it for the advices model first.
+      await getLlamaContext(MODEL)
+
       // Prompt, completion and parsing live in lib/advicesTurn.ts, shared with
       // the benchmark screen.
-      const { advices: parsed } = await runAdvicesTurn({ summary })
+      const { advices: parsed } = await runAdvicesTurn({
+        summary,
+        lang: locale === 'en' ? 'en' : 'it',
+        level: normalizeLevel(proficiencyLevel),
+      })
 
       if (parsed.length) {
         setAdvices([...parsed, ...staticAdvices(t)])
@@ -434,10 +487,29 @@ export default function Advices() {
     <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: HEADER_TOP, paddingBottom: insets.bottom + 16 }}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: HORIZONTAL_GUTTER, justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#333' }}>
+        {/* Shrinks rather than truncates: 'Analisi spese' fits at 34, the
+            longer 'Transaction Analysis' does not once the level button takes
+            its 40px. */}
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          style={{ flex: 1, marginRight: 8, fontSize: 34, fontWeight: 'bold', color: '#333' }}
+        >
           {t('tabs.analysis')}
         </Text>
 
+        {/* Icon only: the title fills the row. Same reviewer rule as the chat
+            header — everyone else keeps the level their questionnaire set. */}
+        <LevelSelector
+          levels={PROFICIENCY_LEVELS.filter((l) => isReviewer || l === proficiencyLevel).map((l) => ({
+            key: l,
+            label: LEVEL_CONFIG[l].label,
+            icon: LEVEL_CONFIG[l].icon,
+          }))}
+          selectedKey={proficiencyLevel}
+          onSelect={(key) => setProficiencyLevel(key as ProficiencyLevel)}
+        />
       </View>
 
       {/* Period selector */}
@@ -520,7 +592,9 @@ export default function Advices() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
-        {loading ? (
+        {/* The full-height spinner only while there is nothing to show yet;
+            a re-run keeps the previous advices under a slim banner. */}
+        {loading && !advices.length ? (
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <ActivityIndicator color={COLORS.primary} />
             <Text style={{ marginTop: 12, color: '#888', fontSize: 14 }}>
@@ -532,7 +606,50 @@ export default function Advices() {
             <Text style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>
               {t('advicesLabels.advices')}
             </Text>
-            {advices.map((item, idx) => {
+            {loading && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12,
+                paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#F4F6FB',
+              }}>
+                <ActivityIndicator color={COLORS.primary} size="small" />
+                <Text style={{ color: '#666', fontSize: 13, flex: 1 }}>
+                  {statusText || t('advicesLabels.analysis')}
+                </Text>
+              </View>
+            )}
+            {(() => {
+              const s = suggerimentoDaSpese(
+                pieData.map((p) => ({
+                  category: p.key ?? '',
+                  total: p.value,
+                  // Never more months than the selected period spans.
+                  months: Math.min(p.months ?? 1, period === 'month' ? 1 : period === '3months' ? 3 : 12),
+                })),
+                proficiencyLevel,
+                locale === 'en' ? 'en' : 'it',
+                (c) => categoriesFromLocale[c]?.label || c,
+                period
+              )
+              if (!s) return null
+              return (
+                <View style={{ backgroundColor: '#F4F6FB', borderRadius: 12, padding: 15, marginBottom: 12 }}>
+                  <Text style={{ color: '#333', lineHeight: 20 }}>{s.messaggio}</Text>
+                  <Text style={{ color: '#888', fontSize: 11, marginTop: 6 }}>{s.avvertenza}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: '/chat',
+                        params: { rag: '1', ask: s.domanda_chat, askId: String(Date.now()) },
+                      })
+                    }
+                    style={{ marginTop: 10, backgroundColor: COLORS.primary, borderRadius: 8, padding: 10 }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center' }}>{s.collegamento}</Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            })()}
+            {visibleAdvices.map((item, idx) => {
               const baseColor = getCategoryBaseColor(item.category)
               const emoji = getCategoryEmoji(item.category)
               return (

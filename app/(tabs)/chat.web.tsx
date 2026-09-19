@@ -1,6 +1,6 @@
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -18,7 +18,8 @@ import ChatScreen from '@/components/ChatScreen';
 import { Source, SourcesDisplay } from '@/components/SourcesDisplay';
 import { COLORS } from '@/constants/color';
 import { useTranslation } from '@/lib/i18n';
-import { PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout';
+import { useSharedLevel } from '@/lib/levelStore';
+import { ProficiencyLevel } from './_layout';
 
 type Message = {
   role: 'system' | 'user' | 'assistant';
@@ -36,6 +37,9 @@ type Category = {
   name: string;
   nameEn: string;
   questions: string[];
+  // Not translations: the English corpus (FCA / Bank of England) covers different
+  // topics from CONSOB, so each question targets a page that answers it.
+  questionsEn: string[];
   iconConfig: IconConfig;
 };
 
@@ -51,6 +55,13 @@ const QUESTION_CATEGORIES: Category[] = [
       'Chi può prestare i servizi di investimento?',
       'Che cos\'è il trading algoritmico?',
       'Che cos\'è l\'abuso di informazioni privilegiate?',
+    ],
+    questionsEn: [
+      'What is the Prudential Regulation Authority (PRA)?',
+      'What is not covered in GDP statistics?',
+      'Why is the housing market important to the economy?',
+      'How can you limit your exposure to risk?',
+      'Can banks create as much money as they like?'
     ],
   },
   {
@@ -69,6 +80,16 @@ const QUESTION_CATEGORIES: Category[] = [
       'Cosa sono i prodotti derivati?',
       'Che cos\'è uno swap?',
     ],
+    questionsEn: [
+      'Who can give debt advice?',
+      'What are buildings insurance premiums?',
+      'What are the benefits of tokenisation?',
+      'What are the differences between commodity and fiat money?',
+      'Is a stablecoin the same thing as a CBDC?',
+      'How some debt products are advertised?',
+      'Are there stablecoins in the UK today?'
+
+    ],
   },
   {
     id: 'inflazione',
@@ -82,17 +103,30 @@ const QUESTION_CATEGORIES: Category[] = [
       'Perché dovrei seguire i movimenti dei tassi di interesse delle banche centrali?',
       'Puoi fornire un esempio dell\'effetto dell\'inflazione su un\'obbligazione a cedola fissa?',
     ],
+    questionsEn: [
+      'Inflation was not caused by people spending too much. So why will higher interest rates work?',
+      'Should I be worried whenever I see reduced prices?',
+      'How does the Bank of England influence the exchange rate?',
+      'What does the Bank of England do to keep inflation low and stable?'
+    ],
   },
   {
     id: 'crisi',
     name: 'Crisi',
-    nameEn: 'Crisis',
-    iconConfig: { library: 'Feather', name: 'shield' },
+    nameEn: 'Investing',
+    iconConfig: { library: 'Feather', name: 'activity' },
     questions: [
       'Che cosa fu la crisi del 1929?',
-      'Quali furono le cause remote della crisi del 1929?',
+      'Che cosa accadde il 24 ottobre 1929, il cosiddetto Giovedì nero?',
       'Qual è la sequenza tipica attraverso cui si sviluppa una crisi generata da una bolla speculativa?',
-      'Qual è stato l\'impatto del Covid-19 sui mercati azionari a livello mondiale?',
+      'Quali errori si possono commettere negli investimenti durante le crisi?',
+    ],
+    questionsEn: [
+      'Am I really ready to invest for the long term?',
+      'What are the golden rules of investing?',
+      'Are you tempted by high-risk investments?',
+      'Should I be investing using a credit card?',
+      'How to understand investment right for my risk tolerance?'
     ],
   },
   {
@@ -104,9 +138,16 @@ const QUESTION_CATEGORIES: Category[] = [
       'Cosa deve fare l\'investitore prima di effettuare un investimento in strumenti finanziari?',
       'Qual è la differenza tra titoli di capitale e titoli di debito?',
       'Cosa si intende per rischio emittente?',
-      'Che cos\'è il rischio di mercato?',
+      'Come valuto appropriatezza di un investimento?',
       'Qual è il rischio associato alla divisa in cui è denominato un investimento?',
       'Quando l\'investitore dovrebbe concludere un\'operazione avente ad oggetto strumenti finanziari derivati?',
+    ],
+    questionsEn: [
+      'How to stop or reduce trail commission?',
+      'What is an unregulated collective investment scheme (UCIS)?',
+      'What is a collective investment scheme (CIS)?',
+      'What are risks of investing in mini-bonds?',
+      "What's the investment going to cost me in fees/charges?"
     ],
   },
   {
@@ -120,21 +161,33 @@ const QUESTION_CATEGORIES: Category[] = [
       'Fino a quando riesce a funzionare lo schema Ponzi?',
       'Quali sono i principali ingredienti della truffa utilizzati dal truffatore?',
     ],
+    questionsEn: [
+      'How forex (FX) trading and brokerage scams work',
+      'What happens after you cancel a recurring card payment?',
+      'How binary options scams work?',
+      'How landing banking scams work',
+      "What precautions should you take when using your bank's website to avoid fake website scams?"
+    ],
   },
 ];
 
 const NGROK_URL = "https://rhyme-headlamp-overnight.ngrok-free.dev";
+
+// The server answers and retrieves in this language: CONSOB pages for "it",
+// FCA and Bank of England pages for "en".
+type Lingua = 'it' | 'en';
 
 async function callModel(
   conversation: Message[],
   endpoint: ModelChoice,
   ragEnabled: boolean,
   proficiencyLevel: ProficiencyLevel,
+  lingua: Lingua,
   query?: string,
   onPhaseChange?: (phase: AnimationPhase) => void
 ) {
 
-  console.log("RAG ENABLED:", ragEnabled, "LEVEL:", proficiencyLevel);
+  console.log("RAG ENABLED:", ragEnabled, "LEVEL:", proficiencyLevel, "LINGUA:", lingua);
   const messages = conversation.filter(m => m.role !== 'system');
 
   const url = ragEnabled
@@ -146,10 +199,12 @@ async function callModel(
       messages,
       query: query ?? messages[messages.length - 1]?.content,
       k: 6,
-      min_score: 0.05,
+      //min_score: 0.05,
+      min_score: 5.5,
       proficiency_level: proficiencyLevel,
+      lingua,
     }
-    : { messages };
+    : { messages, lingua };
 
   // Simula le fasi di elaborazione
   if (onPhaseChange) {
@@ -170,8 +225,12 @@ async function callModel(
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.detail ?? "Server error");
+    const err = await response.json().catch(() => ({}));
+    // FastAPI's 422 carries `detail` as a list of validation errors, not a string.
+    const detail = Array.isArray(err.detail)
+      ? err.detail.map((d: any) => d.msg).join('; ')
+      : err.detail;
+    throw new Error(detail ?? `Server error ${response.status}`);
   }
 
   if (onPhaseChange) {
@@ -204,7 +263,7 @@ type ModelChoice = 'call_gemma_1b' | 'call_gemma_270m' | 'call_smollm3';
 
 export default function Chat(): React.JSX.Element {
 
-  const { rag, level, resetMessages } = useLocalSearchParams();
+  const { rag, resetMessages, ask, askId } = useLocalSearchParams();
   const { locale, t } = useTranslation();
 
   const INITIAL_CONVERSATION: Message[] = [
@@ -215,6 +274,7 @@ export default function Chat(): React.JSX.Element {
   ];
 
   const getCategoryName = (category: Category) => locale === 'en' ? category.nameEn : category.name;
+  const getCategoryQuestions = (category: Category) => locale === 'en' ? category.questionsEn : category.questions;
 
   const renderIcon = (iconConfig: IconConfig, color: string) => {
     const size = 20;
@@ -242,7 +302,7 @@ export default function Chat(): React.JSX.Element {
   const [currentSources, setCurrentSources] = useState<Source[]>([]);
   const [showSourcesModal, setShowSourcesModal] = useState<boolean>(false);
   const [ragEnabled, setRagEnabled] = useState<boolean>(false);
-  const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>('intermediate');
+  const [proficiencyLevel] = useSharedLevel();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showQuestionsModal, setShowQuestionsModal] = useState<boolean>(false);
 
@@ -255,13 +315,6 @@ export default function Chat(): React.JSX.Element {
     setRagEnabled(isEnabled);
   }, [rag]);
 
-  // Aggiorna il livello di competenza dell'utente quando level cambia
-  useEffect(() => {
-    const levelParam = Array.isArray(level) ? level[0] : level;
-    if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
-      setProficiencyLevel(levelParam as ProficiencyLevel);
-    }
-  }, [level]);
 
   // Listen for reset messages from header button
   useEffect(() => {
@@ -284,6 +337,21 @@ export default function Chat(): React.JSX.Element {
     fetchSaluto();
   }, []);
 
+  // Auto-send a question passed from the spending analysis card (once per askId).
+  const lastAskId = useRef<string | null>(null);
+  useEffect(() => {
+    const q = Array.isArray(ask) ? ask[0] : ask;
+    const id = String(Array.isArray(askId) ? askId[0] : askId ?? q);
+    if (!q || lastAskId.current === id) return;
+    lastAskId.current = id;
+    // Always through /rag/<model> with the user's level and language, and only this question:
+    // the plain /<model> endpoints have no documents, language or level.
+    const question: Message = { role: 'user', content: q };
+    setConversation((prev) => [...prev, question]);
+    requestReply([question], true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask, askId]);
+
   const handleSendMessage = async (message?: string) => {
     const messageToSend = message || userInput.trim();
 
@@ -299,11 +367,16 @@ export default function Chat(): React.JSX.Element {
     if (!message) {
       setUserInput('');
     }
+    await requestReply(updatedConversation);
+  };
+
+  // Asks the server to answer the last user message of `conv` and appends the reply.
+  const requestReply = async (conv: Message[], forceRag = false) => {
     setIsGenerating(true);
     setAnswerPhase('fetching');
 
     try {
-      const data = await callModel(updatedConversation, selectedModel, ragEnabled, proficiencyLevel, undefined, setAnswerPhase);
+      const data = await callModel(conv, selectedModel, forceRag || ragEnabled, proficiencyLevel, locale, undefined, setAnswerPhase);
 
       const sources: Source[] = data.sources ? data.sources.map((source: any, idx: number) => ({
         id: source.id || `[${idx + 1}]`,
@@ -336,6 +409,24 @@ export default function Chat(): React.JSX.Element {
       setAnswerPhase('idle');
     }
   };
+
+  // When the user changes level or language, regenerate the last answer with the new value.
+  const previousSettings = useRef({ locale, proficiencyLevel });
+  useEffect(() => {
+    const prev = previousSettings.current;
+    previousSettings.current = { locale, proficiencyLevel };
+    if (prev.locale === locale && prev.proficiencyLevel === proficiencyLevel) return;
+    if (isGenerating) return;
+
+    const last = conversation[conversation.length - 1];
+    if (last?.role !== 'assistant') return;
+
+    const withoutLastReply = conversation.slice(0, -1);
+    setConversation(withoutLastReply);
+    setCurrentSources([]);
+    requestReply(withoutLastReply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale, proficiencyLevel]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -484,7 +575,7 @@ export default function Chat(): React.JSX.Element {
             {/* Questions list */}
             {selectedCategory && (
             <ScrollView style={styles.questionsListContainer}>
-              {QUESTION_CATEGORIES.find(c => c.id === selectedCategory)?.questions.map(
+              {getCategoryQuestions(QUESTION_CATEGORIES.find(c => c.id === selectedCategory)!).map(
                 (question, index) => (
                   <TouchableOpacity
                     key={index}

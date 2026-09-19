@@ -39,3 +39,9 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# Python bytecode (revision/)
+__pycache__/
+
+# Windows crash dumps
+*.stackdump

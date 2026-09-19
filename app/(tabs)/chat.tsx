@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -22,18 +22,18 @@ import ProgressBar from '@/components/ProgressBar';
 
 // Import utilities
 import { SourcesDisplay } from '@/components/SourcesDisplay';
+import { normalizeLevel } from '@/lib/chatPrompt';
+import type { Lang } from '@/lib/retrieval';
+import { CHAT_GENERATION, runChatTurn } from '@/lib/chatTurn';
 import { downloadModel } from '@/lib/downloadModel';
-import { cleanupLegacyModels, downloadUrl, getModel, minValidSize, modelPath } from '@/lib/modelConfig';
 import { useTranslation } from '@/lib/i18n';
+import { useSharedLevel } from '@/lib/levelStore';
+import { getLlamaContext } from '@/lib/llamaContext';
+import { cleanupLegacyModels, downloadUrl, minValidSize, modelPath, resolveModel } from '@/lib/modelConfig';
 import {
   initializeLocalModels
 } from '@/lib/modelStorage';
-import { getLlamaContext } from '@/lib/llamaContext';
-import { loadProficiencyLevelWithFallback } from '@/lib/questionnaireStorage';
-import { normalizeLevel } from '@/lib/chatPrompt';
-import { CHAT_GENERATION, runChatTurn } from '@/lib/chatTurn';
 import { appStyles } from '../../styles/components/chatStyles';
-import { PROFICIENCY_LEVELS, ProficiencyLevel } from './_layout';
 
 // Conditionally import native modules (only available on mobile)
 let RNFS: any = null;
@@ -51,96 +51,175 @@ type IconConfig = {
 type Category = {
   id: string;
   name: string;
-  nameEn: string;
   questions: string[];
   iconConfig: IconConfig;
 };
 
-const QUESTION_CATEGORIES: Category[] = [
-  {
-    id: 'generali',
-    name: 'Generali',
-    nameEn: 'General',
-    iconConfig: { library: 'Ionicons', name: 'grid-outline' },
-    questions: [
-      'Su cosa si fonda una buona pianificazione finanziaria?',
-      'Cosa devi assolutamente sapere prima di investire?',
-      'Chi può prestare i servizi di investimento?',
-      'Che cos\'è il trading algoritmico?',
-      'Che cos\'è l\'abuso di informazioni privilegiate?',
-    ],
-  },
-  {
-    id: 'prodotti-finanziari',
-    name: 'Prodotti finanziari',
-    nameEn: 'Financial Products',
-    iconConfig: { library: 'Feather', name: 'pie-chart' },
-    questions: [
-      'Cosa sono i fondi comuni?',
-      'Cosa sono le azioni?',
-      'Che cosa significa il termine criptovaluta?',
-      'Le monete a corso legale e le criptovalute assolvono alle stesse funzioni?',
-      'Chi acquista un\'obbligazione cosa fa?',
-      'Chi è l\'emittente di un\'obbligazione?',
-      'Che cosa indica la scadenza di un\'obbligazione?',
-      'Cosa sono i prodotti derivati?',
-      'Che cos\'è uno swap?',
-    ],
-  },
-  {
-    id: 'inflazione',
-    name: 'Inflazione',
-    nameEn: 'Inflation',
-    iconConfig: { library: 'Feather', name: 'trending-up' },
-    questions: [
-      'Che cos\'è l\'inflazione?',
-      'Qual è l\'effetto dell\'aumento dei tassi di interesse sui nuovi prestiti?',
-      'Perché devo considerare l\'inflazione nella mia strategia di investimento?',
-      'Perché dovrei seguire i movimenti dei tassi di interesse delle banche centrali?',
-      'Puoi fornire un esempio dell\'effetto dell\'inflazione su un\'obbligazione a cedola fissa?',
-    ],
-  },
-  {
-    id: 'crisi',
-    name: 'Crisi',
-    nameEn: 'Crisis',
-    iconConfig: { library: 'Feather', name: 'shield' },
-    questions: [
-      'Che cosa fu la crisi del 1929?',
-      'Quali furono le cause remote della crisi del 1929?',
-      'Qual è la sequenza tipica attraverso cui si sviluppa una crisi generata da una bolla speculativa?',
-      'Qual è stato l\'impatto del Covid-19 sui mercati azionari a livello mondiale?',
-    ],
-  },
-  {
-    id: 'rischi',
-    name: 'Rischi dell\'investimento',
-    nameEn: 'Investment Risks',
-    iconConfig: { library: 'Feather', name: 'alert-circle' },
-    questions: [
-      'Cosa deve fare l\'investitore prima di effettuare un investimento in strumenti finanziari?',
-      'Qual è la differenza tra titoli di capitale e titoli di debito?',
-      'Cosa si intende per rischio emittente?',
-      'Che cos\'è il rischio di mercato?',
-      'Qual è il rischio associato alla divisa in cui è denominato un investimento?',
-      'Quando l\'investitore dovrebbe concludere un\'operazione avente ad oggetto strumenti finanziari derivati?',
-    ],
-  },
-  {
-    id: 'truffe',
-    name: 'Truffe',
-    nameEn: 'Scams',
-    iconConfig: { library: 'AntDesign', name: 'alert' },
-    questions: [
-      'Qual è la costante nelle truffe finanziarie?',
-      'Che cos\'è lo schema Ponzi?',
-      'Fino a quando riesce a funzionare lo schema Ponzi?',
-      'Quali sono i principali ingredienti della truffa utilizzati dal truffatore?',
-    ],
-  },
-];
-
-const MODEL = getModel();
+/**
+ * One list per language, not one list with translated labels: the fourth
+ * category is a different subject in each — 'Crisi' in Italian, 'Investing' in
+ * English — because the two corpora cover different ground (CONSOB vs FCA and
+ * the Bank of England). The lists may differ in length too.
+ *
+ * Ids are shared where the subject is shared, so switching language keeps the
+ * selected chip; 'crisi' and 'investing' are deliberately different ids, and
+ * the effect below clears the selection when it has no counterpart.
+ */
+const QUESTION_CATEGORIES: Record<Lang, Category[]> = {
+  it: [
+    {
+      id: 'generali',
+      name: 'Generali',
+      iconConfig: { library: 'Ionicons', name: 'grid-outline' },
+      questions: [
+        'Su cosa si fonda una buona pianificazione finanziaria?',
+        'Cosa devi assolutamente sapere prima di investire?',
+        'Chi può prestare i servizi di investimento?',
+        'Che cos\'è il trading algoritmico?',
+        'Che cos\'è l\'abuso di informazioni privilegiate?',
+      ],
+    },
+    {
+      id: 'prodotti-finanziari',
+      name: 'Prodotti finanziari',
+      iconConfig: { library: 'Feather', name: 'pie-chart' },
+      questions: [
+        'Cosa sono i fondi comuni?',
+        'Cosa sono le azioni?',
+        'Che cosa significa il termine criptovaluta?',
+        'Le monete a corso legale e le criptovalute assolvono alle stesse funzioni?',
+        'Chi acquista un\'obbligazione cosa fa?',
+        'Chi è l\'emittente di un\'obbligazione?',
+        'Che cosa indica la scadenza di un\'obbligazione?',
+        'Cosa sono i prodotti derivati?',
+        'Che cos\'è uno swap?',
+      ],
+    },
+    {
+      id: 'inflazione',
+      name: 'Inflazione',
+      iconConfig: { library: 'Feather', name: 'trending-up' },
+      questions: [
+        'Che cos\'è l\'inflazione?',
+        'Qual è l\'effetto dell\'aumento dei tassi di interesse sui nuovi prestiti?',
+        'Perché devo considerare l\'inflazione nella mia strategia di investimento?',
+        'Perché dovrei seguire i movimenti dei tassi di interesse delle banche centrali?',
+        'Puoi fornire un esempio dell\'effetto dell\'inflazione su un\'obbligazione a cedola fissa?',
+      ],
+    },
+    {
+      id: 'crisi',
+      name: 'Crisi',
+      iconConfig: { library: 'Feather', name: 'activity' },
+      questions: [
+        'Che cosa fu la crisi del 1929?',
+        'Che cosa accadde il 24 ottobre 1929, il cosiddetto Giovedì nero?',
+        'Qual è la sequenza tipica attraverso cui si sviluppa una crisi generata da una bolla speculativa?',
+        'Quali errori si possono commettere negli investimenti durante le crisi?',
+      ],
+    },
+    {
+      id: 'rischi',
+      name: 'Rischi dell\'investimento',
+      iconConfig: { library: 'Feather', name: 'alert-circle' },
+      questions: [
+        'Cosa deve fare l\'investitore prima di effettuare un investimento in strumenti finanziari?',
+        'Qual è la differenza tra titoli di capitale e titoli di debito?',
+        'Cosa si intende per rischio emittente?',
+        'Come valuto appropriatezza di un investimento?',
+        'Qual è il rischio associato alla divisa in cui è denominato un investimento?',
+        'Quando l\'investitore dovrebbe concludere un\'operazione avente ad oggetto strumenti finanziari derivati?',
+      ],
+    },
+    {
+      id: 'truffe',
+      name: 'Truffe',
+      iconConfig: { library: 'AntDesign', name: 'alert' },
+      questions: [
+        'Qual è la costante nelle truffe finanziarie?',
+        'Che cos\'è lo schema Ponzi?',
+        'Fino a quando riesce a funzionare lo schema Ponzi?',
+        'Quali sono i principali ingredienti della truffa utilizzati dal truffatore?',
+      ],
+    },
+  ],
+  en: [
+    {
+      id: 'generali',
+      name: 'General',
+      iconConfig: { library: 'Ionicons', name: 'grid-outline' },
+      questions: [
+        'What is the Prudential Regulation Authority (PRA)?',
+        'What is not covered in GDP statistics?',
+        'Why is the housing market important to the economy?',
+        'How can you limit your exposure to risk?',
+        'Can banks create as much money as they like?',
+      ],
+    },
+    {
+      id: 'prodotti-finanziari',
+      name: 'Financial Products',
+      iconConfig: { library: 'Feather', name: 'pie-chart' },
+      questions: [
+        'Who can give debt advice?',
+        'What are buildings insurance premiums?',
+        'What are the benefits of tokenisation?',
+        'What are the differences between commodity and fiat money?',
+        'Is a stablecoin the same thing as a CBDC?',
+        'How some debt products are advertised?',
+        'Are there stablecoins in the UK today?',
+      ],
+    },
+    {
+      id: 'inflazione',
+      name: 'Inflation',
+      iconConfig: { library: 'Feather', name: 'trending-up' },
+      questions: [
+        'Inflation was not caused by people spending too much. So why will higher interest rates work?',
+        'Should I be worried whenever I see reduced prices?',
+        'How does the Bank of England influence the exchange rate?',
+        'What does the Bank of England do to keep inflation low and stable?',
+      ],
+    },
+    {
+      // No Italian counterpart: the Italian list has 'crisi' in this slot.
+      id: 'investing',
+      name: 'Investing',
+      iconConfig: { library: 'Feather', name: 'activity' },
+      questions: [
+        'Am I really ready to invest for the long term?',
+        'What are the golden rules of investing?',
+        'Are you tempted by high-risk investments?',
+        'Should I be investing using a credit card?',
+        'How to understand investment right for my risk tolerance?',
+      ],
+    },
+    {
+      id: 'rischi',
+      name: 'Investment Risks',
+      iconConfig: { library: 'Feather', name: 'alert-circle' },
+      questions: [
+        'How to stop or reduce trail commission?',
+        'What is an unregulated collective investment scheme (UCIS)?',
+        'What is a collective investment scheme (CIS)?',
+        'What are risks of investing in mini-bonds?',
+        "What's the investment going to cost me in fees/charges?",
+      ],
+    },
+    {
+      id: 'truffe',
+      name: 'Scams',
+      iconConfig: { library: 'AntDesign', name: 'alert' },
+      questions: [
+        'How forex (FX) trading and brokerage scams work',
+        'What happens after you cancel a recurring card payment?',
+        'How binary options scams work?',
+        'How landing banking scams work',
+        "What precautions should you take when using your bank's website to avoid fake website scams?",
+      ],
+    },
+  ],
+};
 
 // ===================== Main Chat Component =====================
 
@@ -155,10 +234,15 @@ export default function Chat(): React.JSX.Element {
   // writes onto the (tabs) route. useLocalSearchParams only sees this screen's own
   // route params, so on native those updates never arrive (on web the URL round-trip
   // hides the problem).
-  const { resetMessages, rag, level } = useGlobalSearchParams();
+  const { resetMessages, rag, level, model, ask, askId } = useGlobalSearchParams();
   const ragParam = Array.isArray(rag) ? rag[0] : rag;
+  const modelParam = Array.isArray(model) ? model[0] : model;
   const levelParam = Array.isArray(level) ? level[0] : level;
   const { locale, t } = useTranslation();
+  const lang = locale === 'en' ? 'en' : 'it';
+  // The model picked in the header, or the app language's default. Changing it
+  // re-runs the init effect below, which loads the new weights.
+  const MODEL = useMemo(() => resolveModel(modelParam, lang), [modelParam, lang]);
 
   if (Platform.OS === 'web') {
     return (
@@ -168,15 +252,23 @@ export default function Chat(): React.JSX.Element {
     );
   }
 
-  const INITIAL_CONVERSATION: Message[] = [
-    {
-      role: 'system',
-      content: `Sei un assistente esperto in finanza personale e mercati finanziari. Rispondi sempre in italiano. Se la domanda non è in italiano rispondi che non puoi rispondere.
+  // Used when RAG is off or retrieves nothing, so it follows the model's own
+  // fine-tuning language (never mix the two — benchmark/RISPOSTA_AGENTE.md §5).
+  const FALLBACK_SYSTEM: Record<'it' | 'en', string> = {
+    it: `Sei un assistente esperto in finanza personale e mercati finanziari. Rispondi sempre in italiano. Se la domanda non è in italiano rispondi che non puoi rispondere.
       Quando ti vengono forniti documenti recuperati, usa solo le informazioni in essi contenute per rispondere alla domanda dell'utente.
       Fornisci una spiegazione completa e chiara, senza interromperti a metà frase.
       Se le informazioni non sono sufficienti per rispondere, dì onestamente che non hai abbastanza dati.
       Non inventare dettagli né fornire consigli di investimento specifici.`,
-    },
+    en: `You are an assistant expert in personal finance and financial markets. Always answer in English. If the question is not in English, reply that you cannot answer it.
+      When retrieved documents are provided, use only the information they contain to answer the user's question.
+      Give a complete and clear explanation, without breaking off mid-sentence.
+      If the information is not enough to answer, say honestly that you do not have enough data.
+      Do not make up details and do not give specific investment advice.`,
+  };
+
+  const INITIAL_CONVERSATION: Message[] = [
+    { role: 'system', content: FALLBACK_SYSTEM[MODEL.lang] },
   ];
 
   const [conversation, setConversation] = useState<Message[]>(INITIAL_CONVERSATION);
@@ -229,13 +321,34 @@ export default function Chat(): React.JSX.Element {
       return t('chat.preview');
     }
   }
-  const [proficiencyLevel, setProficiencyLevel] = useState<string>('intermediate');
+  const [proficiencyLevel] = useSharedLevel();
   const isSendingRef = useRef(false);
-  const isInitializedRef = useRef(false);
+  /** id of the model the init effect last ran for, so a switch re-runs it. */
+  const initializedForRef = useRef<string | null>(null);
+  // Index in `conversation` from which turns are sent as history (1 = after system).
+  const historyStartRef = useRef(1);
 
-  const getLocalizedCategoryName = (category: Category): string => {
-    return locale?.startsWith('en') ? category.nameEn : category.name;
-  };
+  /** The categories of the app language; the two lists are not translations. */
+  const categories = QUESTION_CATEGORIES[lang];
+  const findCategory = (id: string | null) =>
+    id ? categories.find(c => c.id === id) : undefined;
+
+  // A category without a counterpart in the other language ('crisi' / 'investing')
+  // must not stay selected across a language switch.
+  useEffect(() => {
+    if (selectedCategory && !findCategory(selectedCategory)) {
+      setSelectedCategory(null);
+      setShowQuestionsModal(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
+  // A config change (model, RAG, level) starts a fresh context: earlier turns stay
+  // on screen but are no longer sent to the model. Declared before the reset effect
+  // so a reset in the same render (model switch) wins.
+  useEffect(() => {
+    historyStartRef.current = conversation.length;
+  }, [ragParam, modelParam, proficiencyLevel]);
 
   // Listen for reset messages from header button
   useEffect(() => {
@@ -246,6 +359,7 @@ export default function Chat(): React.JSX.Element {
       setRagPhase('idle');
       setShowSources(false);
       setRetrievedDocs([]);
+      historyStartRef.current = 1;
     }
   }, [resetMessages]);
 
@@ -253,6 +367,19 @@ export default function Chat(): React.JSX.Element {
     setRagEnabled(ragParam !== '0');
     setRagPhase('idle');
   }, [ragParam]);
+
+  // Auto-send a question passed from the spending analysis card (once per askId),
+  // as soon as the model is loaded and the rag param has been applied.
+  const lastAskId = useRef<string | null>(null);
+  useEffect(() => {
+    const q = Array.isArray(ask) ? ask[0] : ask;
+    const id = String(Array.isArray(askId) ? askId[0] : askId ?? q);
+    if (!q || !modelReady || lastAskId.current === id) return;
+    if (ragEnabled !== (ragParam !== '0')) return;
+    lastAskId.current = id;
+    handleSendMessage(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask, askId, modelReady, ragEnabled]);
 
   useEffect(() => {
     const initModels = async () => {
@@ -282,35 +409,20 @@ export default function Chat(): React.JSX.Element {
       }
     };
 
-    if (!isInitializedRef.current) {
-      isInitializedRef.current = true;
+    // A model switch (selector or language change) reloads the weights: the
+    // shared context holds one model at a time.
+    if (initializedForRef.current !== MODEL.id) {
+      initializedForRef.current = MODEL.id;
+      setModelReady(false);
+      setModelLoadError(null);
+      setProgress(0);
+      setCurrentPage('preparing');
+      setIsInitializingModels(true);
+      setIsPreparingModel(true);
+      setConversation(INITIAL_CONVERSATION);
       initModels();
     }
-  }, []);
-
-  // Header selector: the `level` param wins over the stored questionnaire value.
-  useEffect(() => {
-    if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
-      setProficiencyLevel(levelParam as ProficiencyLevel);
-      console.log('✓ Proficiency level dal selettore:', levelParam);
-    }
-  }, [levelParam]);
-
-  // Load proficiency level from user profile (con fallback a Supabase)
-  useEffect(() => {
-    const loadUserProficiency = async () => {
-      const storedLevel = await loadProficiencyLevelWithFallback();
-      if (storedLevel) {
-        setProficiencyLevel(storedLevel);
-        console.log('✓ Proficiency level caricato:', storedLevel);
-      } else {
-        console.warn('Proficiency level non trovato, usando default: intermediate');
-        setProficiencyLevel('intermediate');
-      }
-    };
-
-    loadUserProficiency();
-  }, []);
+  }, [MODEL.id]);
 
   const downloadAndLoadModel = async () => {
     setIsPreparingModel(true);
@@ -398,7 +510,7 @@ export default function Chat(): React.JSX.Element {
       // lib/chatTurn.ts, shared with the benchmark screen.
       const { docs: retrievedDocsData, completion: result } = await runChatTurn({
         question: messageToSend,
-        history: conversation.slice(1),
+        history: conversation.slice(Math.max(1, historyStartRef.current)),
         level: normalizeLevel(proficiencyLevel),
         lang: MODEL.lang,
         family: MODEL.family,
@@ -514,7 +626,7 @@ export default function Chat(): React.JSX.Element {
               style={appStyles.categoriesContainer}
               contentContainerStyle={appStyles.categoriesContent}
             >
-              {QUESTION_CATEGORIES.map((category) => (
+              {categories.map((category) => (
                 <TouchableOpacity
                   key={category.id}
                   style={[
@@ -535,7 +647,7 @@ export default function Chat(): React.JSX.Element {
                       selectedCategory === category.id && appStyles.categoryChipTextActive
                     ]}
                   >
-                    {getLocalizedCategoryName(category)}
+                    {category.name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -677,15 +789,15 @@ export default function Chat(): React.JSX.Element {
                   onPress={() => { }}
                 >
                   {/* Modal header */}
-                  {selectedCategory && QUESTION_CATEGORIES.find(c => c.id === selectedCategory) && (
+                  {findCategory(selectedCategory) && (
                     <View style={appStyles.modalHeader}>
                       <View style={appStyles.headerWithBadge}>
                         <View style={appStyles.categorySquareIcon}>
-                          {renderIcon(QUESTION_CATEGORIES.find(c => c.id === selectedCategory)!.iconConfig, '#1E293B')}
+                          {renderIcon(findCategory(selectedCategory)!.iconConfig, '#1E293B')}
                         </View>
                         <Text style={appStyles.modalTitle}>
                           {selectedCategory
-                            ? getLocalizedCategoryName(QUESTION_CATEGORIES.find(c => c.id === selectedCategory)!)
+                            ? findCategory(selectedCategory)!.name
                             : ''}
                         </Text>
                       </View>
@@ -704,7 +816,7 @@ export default function Chat(): React.JSX.Element {
                   {/* Questions list */}
                   {selectedCategory && (
                     <ScrollView style={appStyles.questionsListContainer}>
-                      {QUESTION_CATEGORIES.find(c => c.id === selectedCategory)?.questions.map(
+                      {(findCategory(selectedCategory)?.questions ?? []).map(
                         (question, index) => (
                           <TouchableOpacity
                             key={index}

@@ -1,16 +1,16 @@
-<img src="./assets/images/coin_logo_no_bg.png" alt="LIRA" width="80" height="80">  
+<img src="./assets/images/coin_logo_no_bg.png" alt="FinGuide" width="80" height="80">  
 
-## LIRA - Personal Finance Chatbot for Italian Language LIRA 
+## FinGuide - Personal Finance Chatbot for Italian Language
 
-A cross-platform personal finance assistant combining on-device Small Language Models (SLMs), Retrieval-Augmented Generation (RAG), and personalized financial analytics. LIRA supports users in understanding personal finance concepts through natural language interaction, personalized financial profiling, transaction tracking, and spending analysis.
+A cross-platform personal finance assistant combining on-device Small Language Models (SLMs), Retrieval-Augmented Generation (RAG), and personalized financial analytics. FinGuide supports users in understanding personal finance concepts through natural language interaction, personalized financial profiling, transaction tracking, and spending analysis.
 
 ## 🎥 Demo Video
 
-[Watch the app demo video to discover all features in action!](https://drive.google.com/file/d/1v2SyGfucXcInIqXKV7SoNUo03cOJ6qfH/view?usp=sharing)
+[Watch the app demo video to discover all features in action!](https://drive.google.com/file/d/1GcRJZ7eg5yJlEHaKOV-g4SWTih3ePxpd/view?usp=sharing)
 
 ## 🌐 Live Application
 
-[Try LIRA live!](https://lira-web.expo.app/)
+[Try FinGuide live!](https://lira-web.expo.app/)
 
 A pre-populated reviewer account is available. On the login page, use the dedicated button or sign in with email using the following credentials:
 
@@ -22,12 +22,12 @@ A pre-populated reviewer account is available. On the login page, use the dedica
 ### Web
 <img src="./z_readme_images/questionnaire_web_paper.jpg" width="48%"> <img src="./z_readme_images/home_expenses.jpg" width="48%">
 <br>
-<img src="./z_readme_images/chat_web_paper.jpg" width="48%"> <img src="./z_readme_images/transaction_web_paper.jpg.png" width="48%">
+<img src="./z_readme_images/chat_final.png" width="48%"> <img src="./z_readme_images/analysis.jpg" width="48%">
 
 ### Mobile
-<img src="./z_readme_images/questionnaire_mobile.png" width="30%"> <img src="./z_readme_images/home_expenses_mobile.jpg" width="30%"> 
+<img src="./z_readme_images/questionnaire_mobile.png" width="30%"> <img src="./z_readme_images/home_expenses_mobile.png" width="30%"> 
 <br>
-<img src="./z_readme_images/chat_mobile.jpg" width="30%"> <img src="./z_readme_images/chat_mobile_2.jpg" width="30%"> <img src="./z_readme_images/transaction_mobile.jpg" width="30%"> 
+<img src="./z_readme_images/chat_mobile.jpg" width="30%"> <img src="./z_readme_images/chat_mobile_2.png" width="30%"> <img src="./z_readme_images/transaction_mobile.jpg" width="30%"> <img src="./z_readme_images/transaction_mobile_2.png" width="30%"> 
 
 
 ## ✨ Features
@@ -66,7 +66,7 @@ A pre-populated reviewer account is available. On the login page, use the dedica
 - **Web**: Responsive web version for desktop browsers
 
 ## 🧠 System Architecture
-LIRA consists of three main components:
+FinGuide consists of three main components:
 **1. Domain-Specific Dataset** - 1,740 question–answer pairs derived from CONSOB's "Investor Education" materials, covering financial planning, investments, risk management, investor protection, and more. Split into training (1,310), validation (256), and test (174) sets.
 
 **2. Fine-Tuned Small Language Models** - Three compact open-weight models (Gemma 3 270M, Gemma 3 1B, SmolLM3 3B) adapted to the financial domain via LoRA, achieving BERTScore F1 improvements of **+7.0% to +11.7%** over few-shot baselines.

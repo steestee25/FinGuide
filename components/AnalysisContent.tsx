@@ -3,12 +3,17 @@ import {
   ActivityIndicator,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
 import { COLORS } from '../constants/color';
 import { useTranslation } from '../lib/i18n';
 import locales from '../locales/locales.json';
+import { useRouter } from 'expo-router';
+import { loadProficiencyLevel } from '../lib/questionnaireStorage';
+import { Livello, suggerimentoDaSpese } from '../lib/projection';
+
 
 interface AnalysisContentProps {
   expensesByCategory: Array<{ category: string; total: number }>;
@@ -144,9 +149,25 @@ export default function AnalysisContent({
   const [loading, setLoading] = useState(false);
   const [pieData, setPieData] = useState<any[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [livello, setLivello] = useState<Livello>('intermediate');
+  const router = useRouter();
+
+  useEffect(() => {
+    loadProficiencyLevel().then((l) => {
+      if (l === 'base' || l === 'intermediate' || l === 'advanced') setLivello(l);
+    });
+  }, []);
+
+  const lingua = locale === 'en' ? 'en' : 'it';
 
   const categoriesFromLocale: Record<string, any> =
     (locales as any)[locale]?.categories || {};
+  const projection = suggerimentoDaSpese(
+    expensesByCategory,
+    livello,
+    lingua,
+    (c) => categoriesFromLocale[c]?.label || c
+  );
 
   const getCategoryBaseColor = (keyOrLabel: string) => {
     if (!keyOrLabel) return '#CCCCCC';
@@ -170,7 +191,7 @@ export default function AnalysisContent({
       console.log('[AnalysisContent] expensesByCategory received:', expensesByCategory);
       generateAnalysis();
     }
-  }, [expensesByCategory]);
+  }, [expensesByCategory, locale]);
 
   const generateAnalysis = async () => {
     setLoading(true);
@@ -225,6 +246,7 @@ export default function AnalysisContent({
         })),
         totalSpent: Math.round(total),
         period: 'month',
+        lingua: locale,
       };
 
       console.log('[AnalysisContent] payload:', JSON.stringify(payload));
@@ -233,6 +255,7 @@ export default function AnalysisContent({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify(payload),
       });
@@ -372,6 +395,24 @@ export default function AnalysisContent({
             >
               Consigli
             </Text>
+
+            {projection && (
+              <View style={{ backgroundColor: '#F4F6FB', borderRadius: 12, padding: 15, marginBottom: 12 }}>
+                <Text style={{ color: '#333', lineHeight: 20 }}>{projection.messaggio}</Text>
+                <Text style={{ color: '#888', fontSize: 11, marginTop: 6 }}>{projection.avvertenza}</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/chat',
+                      params: { rag: '1', level: livello, ask: projection.domanda_chat, askId: String(Date.now()) },
+                    })
+                  }
+                  style={{ marginTop: 10, backgroundColor: COLORS.primary, borderRadius: 8, padding: 10 }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '600', textAlign: 'center' }}>{projection.collegamento}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {advices.map((item, idx) => {
               const baseColor = getCategoryBaseColor(item.category);

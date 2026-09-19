@@ -64,7 +64,7 @@
                 "buttonNext": "Login with Email",
                 "orLabel": "or",
                 "existingProfileTitle": "Access an existing profile",
-                "existingProfileSubtitle": "For reviewers only"
+                "existingProfileSubtitle": "For reviewers"
             },
             "emailStep": {
                 "title": "Enter your email",
@@ -492,7 +492,7 @@
                 "buttonNext": "Login con Email",
                 "orLabel": "oppure",
                 "existingProfileTitle": "Accedi direttamente al profilo già creato",
-                "existingProfileSubtitle": "Solo per revisori"
+                "existingProfileSubtitle": "Per revisori"
             },
             "emailStep": {
                 "title": "Inserisci la tua email",

@@ -47,6 +47,16 @@ for (const ref of references) {
     return { id, text: p ? p.text : '<missing from corpus>' };
   });
 
+  // A reference exported before the corpus was replaced points at passages that
+  // no longer exist. Say that, instead of diffing against '<missing from corpus>'.
+  const missing = docs.filter((d) => d.text === '<missing from corpus>').map((d) => d.id);
+  if (missing.length) {
+    check(false, `${ref.name}: ${missing.length}/${ids.length} reference documents are not in the ${lang} corpus`);
+    console.log(`     the reference predates the current corpus — re-export it with the passages:`);
+    for (const id of missing) console.log(`       ${id}`);
+    continue;
+  }
+
   const built = prompt.systemMessageForModel(prompt.buildRagSystemMessage(lang, 'base', docs), family);
   check(built === expected, `${ref.name}: system message (${ids.length} documents)`);
   if (built !== expected) {

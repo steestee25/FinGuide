@@ -1,12 +1,15 @@
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Octicons from '@expo/vector-icons/Octicons';
-import { Tabs, useLocalSearchParams, useRouter } from 'expo-router';
+import { Tabs, useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import ChatOptionsSelector from '../../components/ChatOptionsSelector';
 import ModelSelector from '../../components/ModelSelector';
 import { COLORS } from '../../constants/color';
+import { useTranslation } from '../../lib/i18n';
+import { useIsReviewer, useSharedLevel } from '../../lib/levelStore';
+import { defaultModelId, LOCAL_MODELS, modelsForLang } from '../../lib/modelConfig';
 
 export const PROFICIENCY_LEVELS = ['base', 'intermediate', 'advanced'] as const;
 export type ProficiencyLevel = typeof PROFICIENCY_LEVELS[number];
@@ -21,33 +24,48 @@ export const LEVEL_CONFIG: Record<ProficiencyLevel, { label: string; icon: 'sign
 // grouped selector there; the web header keeps them as separate pills.
 const isNative = Platform.OS !== 'web';
 
-const CHAT_MODEL_OPTIONS = [
+// Web answers from the server, so its options are endpoint names. Native runs
+// the GGUF on-device, so its options are the three models of the app language
+// (lib/modelConfig.ts) — an Italian model must never serve an English session.
+const WEB_MODEL_OPTIONS = [
   { key: 'call_gemma_1b', label: 'Gemma 1B' },
   { key: 'call_gemma_270m', label: 'Gemma 270M' },
   { key: 'call_smollm3', label: 'SmolLM3 3B' },
 ];
 
+const chatModelOptions = (lang: 'it' | 'en') =>
+  isNative
+    ? modelsForLang(lang).map(m => ({ key: m.id, label: m.shortLabel }))
+    : WEB_MODEL_OPTIONS;
+
 export default function TabLayout() {
     const router = useRouter();
-    const { model, rag, level } = useLocalSearchParams();
+    const { rag } = useLocalSearchParams();
+    // Global, not local: router.setParams updates never reach useLocalSearchParams
+    // on native (see the note in chat.tsx), so the selector would keep showing the
+    // model that was picked before last.
+    const { model } = useGlobalSearchParams();
     const ragParam = Array.isArray(rag) ? rag[0] : rag;
-    const levelParam = Array.isArray(level) ? level[0] : level;
     const { width } = useWindowDimensions();
     const isSmartphoneWidth = width < 600;
     // Default RAG to true on web, false on mobile
     const defaultRagValue = Platform.OS === 'web' ? true : (ragParam !== '0');
     const [isRagEnabled, setIsRagEnabled] = useState(defaultRagValue);
-    const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>(
-        PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel) ? (levelParam as ProficiencyLevel) : 'intermediate'
-    );
+    const [proficiencyLevel, setProficiencyLevel] = useSharedLevel();
+    const isReviewer = useIsReviewer();
+    const { locale } = useTranslation();
+    const lang = locale === 'en' ? 'en' : 'it';
+    const modelParam = typeof model === 'string' ? model : undefined;
+    const chatModels = chatModelOptions(lang);
 
+    // Switching language switches the models: a selection made in the other
+    // language would otherwise stay in the URL and reach the chat screen.
     useEffect(() => {
-        if (levelParam === undefined) {
-            router.setParams({ level: proficiencyLevel });
-        } else if (PROFICIENCY_LEVELS.includes(levelParam as ProficiencyLevel)) {
-            setProficiencyLevel(levelParam as ProficiencyLevel);
+        if (!isNative || !modelParam) return;
+        if (LOCAL_MODELS[modelParam]?.lang !== lang) {
+            router.setParams({ model: defaultModelId(lang), resetMessages: Date.now().toString() });
         }
-    }, [levelParam]);
+    }, [lang, modelParam]);
 
     useEffect(() => {
         // On web, default RAG to enabled if not specified
@@ -88,7 +106,7 @@ export default function TabLayout() {
                     shadowColor: '#000',
                 },
                 tabBarIconStyle: {
-                    marginTop: Platform.OS === 'web' && !isSmartphoneWidth ? 0 : 12.5,
+                    marginTop: Platform.OS === 'web' && !isSmartphoneWidth ? 12.5 : 12.5,
                 },
 
             }}
@@ -117,8 +135,14 @@ export default function TabLayout() {
                             </HeaderButton>
                             <ModelSelector
                                 compact={isNative}
-                                models={CHAT_MODEL_OPTIONS}
-                                selectedKey={typeof model === 'string' ? model : undefined}
+                                models={chatModels}
+                                selectedKey={
+                                    isNative
+                                        ? (modelParam && LOCAL_MODELS[modelParam]?.lang === lang
+                                            ? modelParam
+                                            : defaultModelId(lang))
+                                        : modelParam
+                                }
                                 onSelect={(selected) => {
                                     router.setParams({ 
                                         model: selected,
@@ -136,7 +160,7 @@ export default function TabLayout() {
                                             model: typeof model === 'string' ? model : undefined,
                                         });
                                     }}
-                                    levels={PROFICIENCY_LEVELS.map((l) => ({
+                                    levels={PROFICIENCY_LEVELS.filter((l) => isReviewer || l === proficiencyLevel).map((l) => ({
                                         key: l,
                                         label: LEVEL_CONFIG[l].label,
                                         icon: LEVEL_CONFIG[l].icon,
@@ -144,10 +168,6 @@ export default function TabLayout() {
                                     selectedLevelKey={proficiencyLevel}
                                     onSelectLevel={(key) => {
                                         setProficiencyLevel(key as ProficiencyLevel);
-                                        router.setParams({
-                                            level: key,
-                                            model: typeof model === 'string' ? model : undefined,
-                                        });
                                     }}
                                 />
                             ) : (
@@ -175,15 +195,11 @@ export default function TabLayout() {
                                         {isRagEnabled ? 'RAG On' : 'RAG Off'}
                                     </Text>
                                 </Pressable>
-                                <Pressable
+                                {isReviewer && <Pressable
                                     onPress={() => {
                                         const currentIndex = PROFICIENCY_LEVELS.indexOf(proficiencyLevel);
                                         const nextLevel = PROFICIENCY_LEVELS[(currentIndex + 1) % PROFICIENCY_LEVELS.length];
                                         setProficiencyLevel(nextLevel);
-                                        router.setParams({
-                                            level: nextLevel,
-                                            model: typeof model === 'string' ? model : undefined,
-                                        });
                                     }}
                                     style={styles.levelButton}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -196,7 +212,7 @@ export default function TabLayout() {
                                     <Text style={styles.levelButtonText}>
                                         {LEVEL_CONFIG[proficiencyLevel].label}
                                     </Text>
-                                </Pressable>
+                                </Pressable>}
                                 </>
                             )}
                         </View>

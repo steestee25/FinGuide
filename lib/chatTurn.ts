@@ -18,6 +18,18 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
 /** Sampling and stopping parameters, passed to llama.rn's completion() as-is. */
 export type GenerationParams = { n_predict: number; [key: string]: unknown };
 
+/**
+ * A per-call copy of the generation parameters, with its own `stop` array.
+ *
+ * llama.rn appends the chat template's own stop strings to `params.stop` in
+ * place (lib/commonjs/index.js), and in dev React Native deep-freezes every
+ * object handed to a native module. Sharing one array across turns therefore
+ * grows it without bound in release, and throws "Cannot assign to read-only
+ * property 'length'" on the second turn in a debug build.
+ */
+export const freshGeneration = (g: GenerationParams): GenerationParams =>
+  Array.isArray(g.stop) ? { ...g, stop: [...g.stop] } : { ...g };
+
 export const STOP_WORDS = [
   '</s>',
   '<|end|>',
@@ -126,7 +138,7 @@ export async function runChatTurn(o: ChatTurnOptions): Promise<ChatTurnResult> {
   await llamaContext.clearCache(false);
   mark('completion_start');
   const completion = await llamaContext.completion(
-    { messages, ...o.generation },
+    { messages, ...freshGeneration(o.generation) },
     (data: { token: string }) => {
       const { token } = data;
       if (token) {
