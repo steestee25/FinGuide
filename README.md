@@ -10,7 +10,7 @@ A cross-platform personal finance assistant combining on-device Small Language M
 
 ## 🌐 Live Application
 
-[Try FinGuide live!](https://lira-web.expo.app/)
+[Try FinGuide live!](https://finguide-web.expo.app/)
 
 A pre-populated reviewer account is available. On the login page, use the dedicated button or sign in with email using the following credentials:
 
@@ -140,7 +140,7 @@ yarn install
 npm run web
 ```
 
-The app will be available at `http://localhost:8081`. Try the live version at: **https://lira--p7yl6268qj.expo.app/**
+The app will be available at `http://localhost:8081`. Try the live version at: **https://finguide-web.expo.app/**
 
 ### 🔑 Environment Variables
 
