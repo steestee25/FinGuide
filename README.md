@@ -94,8 +94,8 @@ Before getting started, make sure you have installed:
 ### 1️⃣ Clone the Repository
 
 ```bash
-git clone https://github.com/steestee25/lira.git
-cd lira
+git clone https://github.com/steestee25/FinGuide.git
+cd FinGuide
 ```
 
 ### 2️⃣ Install Dependencies
@@ -154,7 +154,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
 ## 📁 Project Structure
 
 ```
-lira/
+FinGuide/
 ├── app/                          # Main app (Expo Router)
 │   ├── _layout.tsx              # Root layout
 │   ├── auth.tsx                 # Authentication screen
@@ -345,7 +345,7 @@ Contributions are welcome! To contribute:
 
 For issues, suggestions, or questions:
 
-- 🐛 Open an [Issue](https://github.com/steestee25/lira/issues)
+- 🐛 Open an [Issue](https://github.com/steestee25/FinGuide/issues)
 - 💬 Contact via email
 - 🌟 If you found this project useful, please leave a star ⭐
 
