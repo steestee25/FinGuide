@@ -6,7 +6,7 @@ A cross-platform personal finance assistant combining on-device Small Language M
 
 ## 🎥 Demo Video
 
-[Watch the app demo video to discover all features in action!](https://drive.google.com/file/d/1GcRJZ7eg5yJlEHaKOV-g4SWTih3ePxpd/view?usp=sharing)
+[Watch the app demo video to discover all features in action!](https://drive.google.com/file/d/1Te2zt-SFq9iBsQyTJrhJFSnyTmTjpCZy/view?usp=sharing)
 
 ## 🌐 Live Application
 
@@ -27,7 +27,7 @@ A pre-populated reviewer account is available. On the login page, use the dedica
 ### Mobile
 <img src="./z_readme_images/questionnaire_mobile.png" width="30%"> <img src="./z_readme_images/home_expenses_mobile.png" width="30%"> 
 <br>
-<img src="./z_readme_images/chat_mobile.jpg" width="30%"> <img src="./z_readme_images/chat_mobile_2.png" width="30%"> <img src="./z_readme_images/transaction_mobile.jpg" width="30%"> <img src="./z_readme_images/transaction_mobile_2.png" width="30%"> 
+<img src="./z_readme_images/chat_mobile.png" width="30%"> <img src="./z_readme_images/chat_mobile_2.png" width="30%"> <img src="./z_readme_images/transaction_mobile.png" width="30%"> <img src="./z_readme_images/transaction_mobile_2.png" width="30%"> 
 
 
 ## ✨ Features
@@ -313,11 +313,25 @@ create table transactions (
 
 Models are hosted on Hugging Face and downloaded on first use. After download, they reside on device storage and operate entirely offline. No additional configuration required - the app handles model fetching automatically.
 
-| Model | Size | Link |
-|-------|------|------|
-| Gemma 3 270M (fine-tuned) | Q8 | [Stee201/gguf-server-q270](https://huggingface.co/Stee201/gguf-server-q270/tree/main) |
-| Gemma 3 1B (fine-tuned) | Q8 | [Stee201/gguf-server-q](https://huggingface.co/Stee201/gguf-server-q) |
-| SmolLM3 3B (fine-tuned) | Q8 | [Stee201/gguf-server-smollm3](https://huggingface.co/Stee201/gguf-server-smollm3/tree/main) |
+The chat offers three models, and each language has its own fine-tune: an Italian session downloads the `-ita-` repositories, an English one the `-ing-` repositories. Switching the app language switches the model.
+
+**Italian**
+
+| Model | Quantization | Repository |
+|-------|--------------|------------|
+| Gemma 3 1B (fine-tuned) | Q8_0 | [Stee201/lira-gemma3-1b-ita-sipar-3reg](https://huggingface.co/Stee201/lira-gemma3-1b-ita-sipar-3reg) |
+| Gemma 3 270M (fine-tuned) | Q8_0 | [Stee201/lira-gemma3-270m-ita-sipar-3reg](https://huggingface.co/Stee201/lira-gemma3-270m-ita-sipar-3reg) |
+| SmolLM3 3B (fine-tuned) | Q4_K_M | [Stee201/lira-smollm3-3b-ita-sipar-3reg](https://huggingface.co/Stee201/lira-smollm3-3b-ita-sipar-3reg) |
+
+**English**
+
+| Model | Quantization | Repository |
+|-------|--------------|------------|
+| Gemma 3 1B (fine-tuned) | Q8_0 | [Stee201/lira-gemma3-1b-ing-sipar-3reg](https://huggingface.co/Stee201/lira-gemma3-1b-ing-sipar-3reg) |
+| Gemma 3 270M (fine-tuned) | Q8_0 | [Stee201/lira-gemma3-270m-ing-sipar-3reg](https://huggingface.co/Stee201/lira-gemma3-270m-ing-sipar-3reg) |
+| SmolLM3 3B (fine-tuned) | Q4_K_M | [Stee201/lira-smollm3-3b-ing-sipar-3reg](https://huggingface.co/Stee201/lira-smollm3-3b-ing-sipar-3reg) |
+
+Every repository also holds the other quantization, so a build can switch between Q8_0 and Q4_K_M without changing repository.
 
 ## 📚 Additional Documentation
 
