@@ -1,4 +1,4 @@
-// Hidden benchmark screen (benchmark/ISTRUZIONI_AGENTE_APP.md §7).
+// Hidden benchmark screen for the on-device measurements.
 //
 // Exists only in APKs built with scripts/build-benchmark-apk.js
 // (-PliraBenchmark=true); elsewhere it redirects home. Opened by deep link, e.g.
@@ -9,7 +9,7 @@
 // Params: model (a BENCH_MODELS id, or "app" for the model the app ships),
 // mode (full | repeat | advices | prova), autostart=1, action=download,
 // ignoreChecks=1, from=N (resume a paused session from run N), items=26a,27b
-// (prova only). See benchmark/PROCEDURA.md.
+// (prova only).
 //
 // Chat turns run through the chat's runChatTurn() and are rendered by the
 // chat's ChatScreen, so ttft_ui_ms and e2e_ms cover the user's code path.
@@ -68,7 +68,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // copy that stays mounted.
 let startedUp = false;
 
-/** What keeps the phone from the protocol's conditions (ISTRUZIONI §3). */
+/** What keeps the phone from the protocol's conditions. */
 function conditionProblems(c: Conditions): string[] {
   const problems: string[] = [];
   if (c.charging) problems.push('cavo collegato / in carica');
@@ -150,7 +150,7 @@ function BenchmarkScreen() {
     s.firstVisible = null;
     s.awaitingFinal = false;
 
-    // A fresh conversation per question (no history, ISTRUZIONI: two messages),
+    // A fresh conversation per question (no history: two messages),
     // then the same state updates the chat makes on "send".
     const tSend = performance.now();
     setConversation([...INITIAL_CONVERSATION, { role: 'user', content: req.question }]);

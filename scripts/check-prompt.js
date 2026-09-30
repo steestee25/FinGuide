@@ -1,5 +1,5 @@
 // Checks lib/chatPrompt.ts against the training records:
-//  1. the PERSONA / LEVEL strings equal the table in benchmark/RISPOSTA_AGENTE.md;
+//  1. the LEVEL strings equal the ones in the training records;
 //  2. rebuilding each reference system message from its document ids (looked up
 //     in the bundled corpus) gives back the reference byte for byte.
 //
@@ -9,8 +9,6 @@
 // on the phone from the benchmark screen.
 
 require('sucrase/register');
-const fs = require('fs');
-const path = require('path');
 
 const prompt = require('../lib/chatPrompt.ts');
 const references = require('../lib/benchmark/data/riferimenti.json');
@@ -25,12 +23,22 @@ const check = (ok, label) => {
   if (!ok) failures++;
 };
 
-// 1. Strings in the RISPOSTA_AGENTE.md table: | `LIVELLO` base | `it` | `en` |
-const md = fs.readFileSync(path.join(__dirname, '..', 'benchmark', 'RISPOSTA_AGENTE.md'), 'utf8');
-for (const line of md.split('\n')) {
-  const m = line.match(/^\| `LIVELLO` (\w+) \| `(.+)` \| `(.+)` \|\s*$/);
-  if (!m) continue;
-  const [, level, it, en] = m;
+// 1. Level strings, copied from the training records (imperfections included).
+const TRAINING_LEVELS = {
+  base: {
+    it: "L'utente ha conoscenze base di finanza. Usa spiegazioni semplici e esempi pratici. Evita termini tecnici o complessi.",
+    en: "The user has basic financial knowledge. Use simple explanations and practical examples. Avoid technical or complex terms.",
+  },
+  intermediate: {
+    it: "L'utente ha conoscenze di finanza intermedie. Puoi introdurre alcuni termini tecnici, ma sempre accompagnati da una spiegazione.",
+    en: "The user has intermediate financial knowledge. You may introduce some technical terms, but always with an explanation.",
+  },
+  advanced: {
+    it: "L'utente ha conoscenze avanzate di finanza personale. Evita spiegazioni eccessivamente basilari, puoi usare termini tecnici e spiegazioni più approfondite.",
+    en: "The user has advanced knowledge of personal finance. Avoid overly basic explanations; you may use technical terms and give more in-depth explanations.",
+  },
+};
+for (const [level, { it, en }] of Object.entries(TRAINING_LEVELS)) {
   check(prompt.LEVEL_INSTRUCTIONS.it[level] === it, `level ${level} (it)`);
   check(prompt.LEVEL_INSTRUCTIONS.en[level] === en, `level ${level} (en)`);
 }

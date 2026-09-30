@@ -1,4 +1,4 @@
-// Runs the measurement protocol of benchmark/ISTRUZIONI_AGENTE_APP.md on the
+// Runs the on-device measurement protocol on the
 // phone and appends raw rows to runs.jsonl / sessioni.jsonl. Nothing is
 // aggregated: the article's tables are built from the raw rows.
 //
@@ -52,7 +52,7 @@ type Reference = { name: string; messages: { role: string; content: string }[]; 
 export const LEVELS: ProficiencyLevel[] = ['base', 'intermediate', 'advanced'];
 
 /**
- * The decoding the article reports quality for (RISPOSTA_AGENTE.md §6): greedy
+ * The decoding the article reports quality for: greedy
  * (temperature 0 keeps only the most likely token), 512 new tokens, no
  * repetition penalty. The seed is recorded; greedy decoding does not use it.
  * Production chat settings differ (lib/chatTurn.ts CHAT_GENERATION).
@@ -68,13 +68,13 @@ export const PAPER_GENERATION: GenerationParams = {
 };
 
 /**
- * full    = 3 warm-up + 30 questions × 3 levels (ISTRUZIONI §3)
+ * full    = 3 warm-up + 30 questions × 3 levels
  * ridotta = 3 warm-up + every third question (n = 0, 3, … 27) × 3 levels.
  *           A declared deviation for models too slow for `full` on one phone
  *           (SmolLM3-3B): on the completed sessions the 30-run subset kept the
  *           medians of ttft, intermediate e2e and its p90 within ~5-10%.
  * repeat  = 3 warm-up + 5 questions × intermediate × 5 repetitions
- * advices = spending advice on fixed transactions × 10 (§5)
+ * advices = spending advice on fixed transactions × 10
  * prova   = 1 warm-up + 2 runs, written apart: a check of the setup, not data.
  *           With `items` ("26a,27b,27i": question n + b/i/a) it replays exactly
  *           those runs, to reproduce a problem seen in a session.
@@ -85,8 +85,8 @@ const RUN_TIMEOUT_MS = 20 * 60 * 1000;
 const ADVICES_RUNS   = 10;
 
 /**
- * The protocol wants the battery above 50% and power saving off (ISTRUZIONI
- * §3). A session pauses as soon as a run ends outside that, and is resumed
+ * The protocol wants the battery above 50% and power saving off.
+ * A session pauses as soon as a run ends outside that, and is resumed
  * after recharging with `from` (the next run in the original order).
  */
 const MIN_BATTERY_PCT = 50;
@@ -508,7 +508,7 @@ export async function recoverInterrupted(): Promise<string | null> {
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 
-// The first load of a process is the cold one (ISTRUZIONI §1b: force-stop, reopen).
+// The first load of a process is the cold one (force-stop, reopen).
 let loadsInThisProcess = 0;
 let sessionRunning = false;
 
@@ -534,7 +534,7 @@ function parseItems(items: string, questions: Question[]): Omit<PlanItem, 'order
 }
 
 /**
- * Warm-up (first questions, intermediate), then the fixed order of §3, every
+ * Warm-up (first questions, intermediate), then the fixed question order, every
  * item numbered. With `resumeFrom` the session continues an interrupted one:
  * warm-up again (fresh process, cold model), then the items from that number
  * on, keeping the original numbering.
@@ -914,7 +914,7 @@ async function runChat(c: RunContext, items: PlanItem[]): Promise<void> {
   }
 }
 
-/** ISTRUZIONI §5: advices on fixed transactions, 10 times, production path. */
+/** Advices on fixed transactions, 10 times, production path. */
 async function runAdvices(c: RunContext): Promise<void> {
   // Mirrors the Supabase queries: expenses only (amount < 0), totals per category.
   const expenses = (FIXTURE as { category: string; amount: number }[]).filter(t => t.amount < 0);

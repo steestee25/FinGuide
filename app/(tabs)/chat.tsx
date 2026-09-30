@@ -253,7 +253,7 @@ export default function Chat(): React.JSX.Element {
   }
 
   // Used when RAG is off or retrieves nothing, so it follows the model's own
-  // fine-tuning language (never mix the two — benchmark/RISPOSTA_AGENTE.md §5).
+  // fine-tuning language (never mix the two).
   const FALLBACK_SYSTEM: Record<'it' | 'en', string> = {
     it: `Sei un assistente esperto in finanza personale e mercati finanziari. Rispondi sempre in italiano. Se la domanda non è in italiano rispondi che non puoi rispondere.
       Quando ti vengono forniti documenti recuperati, usa solo le informazioni in essi contenute per rispondere alla domanda dell'utente.

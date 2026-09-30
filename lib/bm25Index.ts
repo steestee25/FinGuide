@@ -1,7 +1,7 @@
 // Okapi BM25 over an inverted index: term → [{docIdx, tf}]
 //
-// Replicates the retrieval that built the training records
-// (benchmark/RISPOSTA_AGENTE.md §4): same tokeniser, stop-words, k1/b, idf and
+// Replicates the retrieval that built the training records:
+// same tokeniser, stop-words, k1/b, idf and
 // tie-break. The six documents in the prompt — and their order — must match what
 // the model was fine-tuned on, so none of these details is cosmetic.
 

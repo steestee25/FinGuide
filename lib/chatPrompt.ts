@@ -1,5 +1,5 @@
 // The RAG system message, byte for byte the format the models were fine-tuned
-// on (benchmark/RISPOSTA_AGENTE.md §2):
+// on:
 //
 //   {PERSONA} {LEVEL}\n\n{RULES}\n\n{DOC_1}\n\n…\n\n{DOC_6}
 //

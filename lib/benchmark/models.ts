@@ -1,4 +1,4 @@
-// The GGUF files measured by the benchmark (ISTRUZIONI_AGENTE_APP.md §2).
+// The GGUF files measured by the benchmark.
 // Public on Hugging Face under Stee201; every repo holds a Q8_0 and a Q4_K_M.
 // Sizes are the exact byte counts of the files on the Hub.
 
